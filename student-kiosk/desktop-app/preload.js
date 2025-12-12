@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // System info
   getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
   getServerUrl: () => ipcRenderer.invoke('get-server-url'),
+  getSystemNumber: () => ipcRenderer.invoke('get-system-number'),
 
   // CRITICAL: Get screen sources via IPC from main process
   // This is the key fix - desktopCapturer is called in main process, not preload
@@ -64,15 +65,58 @@ document.addEventListener('drop', (e) => {
   e.preventDefault();
 });
 
-// Block certain keyboard shortcuts like devtools
+// Block EVERYTHING - Complete kiosk lockdown
 window.addEventListener('keydown', (e) => {
+  // Block ESC key - prevent fullscreen exit
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    console.log('🔒 ESC key blocked');
+    return;
+  }
+  
+  // Block Alt+Tab - prevent app switching
+  if ((e.altKey && e.key === 'Tab') || (e.metaKey && e.key === 'Tab')) {
+    e.preventDefault();
+    console.log('🔒 Alt+Tab / Cmd+Tab blocked');
+    return;
+  }
+  
+  // Block Alt+F4 - prevent window close
+  if (e.altKey && e.key === 'F4') {
+    e.preventDefault();
+    console.log('🔒 Alt+F4 blocked');
+    return;
+  }
+  
+  // Block Windows key - prevent Start menu
+  if (e.key === 'Meta' || e.key === 'Win') {
+    e.preventDefault();
+    console.log('🔒 Windows/Meta key blocked');
+    return;
+  }
+  
+  // Block Ctrl+Alt+Delete - prevent task manager
+  if (e.ctrlKey && e.altKey && e.key === 'Delete') {
+    e.preventDefault();
+    console.log('🔒 Ctrl+Alt+Delete blocked');
+    return;
+  }
+  
+  // Block F1-F12 keys (system functions)
+  if (e.key >= 'F1' && e.key <= 'F12') {
+    e.preventDefault();
+    console.log(`🔒 ${e.key} blocked`);
+    return;
+  }
+  
+  // Block devtools combinations
   if (
-    (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J')) ||
+    (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
     (e.ctrlKey && e.key.toLowerCase() === 'u') ||
-    e.key === 'F12'
+    (e.altKey && e.key.toLowerCase() === 'f12')
   ) {
     e.preventDefault();
-    console.log(`Blocked shortcut: ${e.key}`);
+    console.log(`🔒 Blocked shortcut: ${e.key}`);
   }
 });
 

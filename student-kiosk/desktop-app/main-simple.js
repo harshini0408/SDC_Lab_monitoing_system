@@ -8,6 +8,25 @@ const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch
 // Enable screen capturing - will be set when app is ready
 console.log('🎬 Kiosk application starting...');
 
+// ✅ AUTO-START: Register app to start after Windows login
+function setupAutoStart() {
+  try {
+    if (process.platform === 'win32') {
+      // Check if already registered
+      const appPath = app.getPath('exe');
+      console.log(`📋 App path: ${appPath}`);
+      
+      // Note: If running via npm start (development), auto-start uses electron.exe path
+      // For production EXE, the NSIS installer handles registry entry
+      // Auto-start in production is configured in package.json build.nsis
+      console.log('✅ Auto-start configured in NSIS installer for production');
+      console.log('   In development, run: npm run build-win to create installer with auto-start');
+    }
+  } catch (error) {
+    console.error('⚠️ Error setting up auto-start:', error.message);
+  }
+}
+
 let mainWindow = null;
 let timerWindow = null;
 let currentSession = null;
@@ -16,16 +35,24 @@ let sessionActive = false;
 // Load server URL from config file (auto-detected by server)
 function loadServerUrl() {
   try {
-    const configPath = path.join(__dirname, '..', '..', '..', 'server-config.json');
-    if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      const url = `http://${config.serverIp}:${config.serverPort}`;
-      console.log(`✅ Loaded server URL from config: ${url}`);
-      console.log(`📅 Config last updated: ${config.lastUpdated}`);
-      return url;
-    } else {
-      console.warn('⚠️ Config file not found, using default localhost');
+    // Try multiple possible config locations
+    const possiblePaths = [
+      path.join(__dirname, '..', '..', '..', 'server-config.json'),  // From desktop-app folder
+      path.join(app.getAppPath(), '..', '..', '..', 'server-config.json'),  // From app folder
+      'D:\\screen_mirror_deployment_my_laptop\\server-config.json'  // Absolute path
+    ];
+    
+    for (const configPath of possiblePaths) {
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        const url = `http://${config.serverIp}:${config.serverPort}`;
+        console.log(`✅ Loaded server URL from config: ${url}`);
+        console.log(`📁 Config path: ${configPath}`);
+        console.log(`📅 Config last updated: ${config.lastUpdated}`);
+        return url;
+      }
     }
+    console.warn('⚠️ Config file not found in any expected location');
   } catch (error) {
     console.error('⚠️ Error loading config:', error.message);
   }
@@ -42,13 +69,13 @@ function detectLabFromIP() {
     let detectedLab = null;
     
     // IP range to Lab ID mapping
+    // Note: Remove specific IP ranges when not at college
+    // Default to CC1 for local development
     const labIPRanges = {
-      '10.10.46.': 'CC1',   // Example: CC1 lab uses 10.10.46.*
-      '10.10.47.': 'CC2',   // Example: CC2 lab uses 10.10.47.*
-      '10.10.48.': 'CC3',   // Example: CC3 lab uses 10.10.48.*
-      '192.168.0.': 'CC1',  // Fallback for common local network
-      '192.168.1.': 'CC2',  // Fallback for common local network
-      '192.168.29.': 'CC1', // Your current network
+      // Add your college IP ranges here when needed
+      // '10.10.46.': 'CC1',
+      // '10.10.47.': 'CC2',
+      // '10.10.48.': 'CC3',
     };
     
     // Check all network interfaces
@@ -89,9 +116,9 @@ const SYSTEM_NUMBER = process.env.SYSTEM_NUMBER || `${LAB_ID}-${String(Math.floo
 
 // Kiosk mode configuration
 // ✅ PRODUCTION: Full kiosk lock enabled from startup
-// Set KIOSK_MODE=false only temporarily while debugging.
-const KIOSK_MODE = false; // 🔧 DEBUG MODE: Disabled for testing
-let isKioskLocked = false; // 🔧 DEBUG MODE: Unlocked for testing
+// KIOSK_MODE = true: Full-screen lock, no ESC, no Alt+Tab, no keyboard shortcuts
+const KIOSK_MODE = true; // ✅ ENABLED: Full kiosk lockdown - all shortcuts blocked
+let isKioskLocked = true; // ✅ LOCKED: Complete lockdown until student logs in
 
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -114,7 +141,7 @@ function createWindow() {
         nodeIntegration: false,
         enableBlinkFeatures: 'GetDisplayMedia',
         webSecurity: false,
-        devTools: true // 🔧 DEBUG MODE: Enabled for testing
+        devTools: false // 🔒 KIOSK MODE: DevTools disabled for security
       }
     } : {
       width,
@@ -166,16 +193,17 @@ function createWindow() {
     // Fullscreen is already enforced via window options in kiosk mode
     mainWindow.focus();
     
-    // 🔧 DEBUG MODE: Open DevTools automatically for testing
+    // DevTools only in testing mode
     if (!KIOSK_MODE) {
       mainWindow.webContents.openDevTools();
-      console.log('🔧 DevTools opened automatically for debugging');
+      console.log('🔧 DevTools opened (testing mode)');
     }
     
     console.log(`✅ Application Ready - System: ${SYSTEM_NUMBER}, Lab: ${LAB_ID}`);
     console.log(`✅ Server: ${SERVER_URL}`);
     if (KIOSK_MODE) {
-      console.log('🔒 FULL KIOSK MODE - All shortcuts blocked!');
+      console.log('🔒 FULL KIOSK MODE ACTIVE - System completely locked down!');
+      console.log('🚫 All keyboard shortcuts blocked until student login');
     } else {
       console.log('✅ TESTING MODE - Shortcuts available, DevTools enabled');
     }
@@ -356,14 +384,10 @@ function createTimerWindow(studentName, studentId) {
         }
       });
 
-  // Minimize after showing briefly (auto-minimize timer window after login)
+  // Keep timer window visible for debugging
   timerWindow.once('ready-to-show', () => {
-    timerWindow.showInactive(); // Show without stealing focus
-    // Use a small delay to ensure window is fully rendered before minimizing
-    setTimeout(() => {
-      timerWindow.minimize();
-      console.log('⏬ Timer window auto-minimized after login');
-    }, 500);
+    timerWindow.show(); // Show and keep visible
+    console.log('✅ Timer window kept visible for debugging');
   });
 
   console.log('⏱️ Timer window created for:', studentName);
@@ -401,27 +425,44 @@ function setupIPCHandlers() {
   // Handle student login
   ipcMain.handle('student-login', async (event, credentials) => {
     try {
-      const creds = {
-        studentId: credentials.studentId,
-        password: credentials.password,
-        labId: LAB_ID,
-      };
+      const isGuest = credentials.isGuest === true;
+      
+      let authData = null;
+      
+      if (isGuest) {
+        // For guest mode, skip authentication and use GUEST account
+        console.log('🔓 Guest mode login attempt');
+        authData = {
+          success: true,
+          student: {
+            name: 'Guest User',
+            studentId: 'GUEST'
+          }
+        };
+      } else {
+        // Normal student authentication
+        const creds = {
+          studentId: credentials.studentId,
+          password: credentials.password,
+          labId: LAB_ID,
+        };
 
-      console.log('🔐 Attempting authentication for:', creds.studentId);
+        console.log('🔐 Attempting authentication for:', creds.studentId);
 
-      const authRes = await fetch(`${SERVER_URL}/api/authenticate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(creds),
-      });
-      const authData = await authRes.json();
+        const authRes = await fetch(`${SERVER_URL}/api/authenticate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(creds),
+        });
+        authData = await authRes.json();
 
-      if (!authData.success) {
-        console.error('❌ Authentication failed:', authData.error);
-        return { success: false, error: authData.error || 'Authentication failed' };
+        if (!authData.success) {
+          console.error('❌ Authentication failed:', authData.error);
+          return { success: false, error: authData.error || 'Authentication failed' };
+        }
+
+        console.log('✅ Authentication successful for:', authData.student.name);
       }
-
-      console.log('✅ Authentication successful for:', authData.student.name);
 
       const sessionRes = await fetch(`${SERVER_URL}/api/student-login`, {
         method: 'POST',
@@ -431,7 +472,8 @@ function setupIPCHandlers() {
           studentId: authData.student.studentId,
           computerName: os.hostname(),
           labId: LAB_ID,
-          systemNumber: credentials.systemNumber || SYSTEM_NUMBER
+          systemNumber: credentials.systemNumber || SYSTEM_NUMBER,
+          isGuest: isGuest
         }),
       });
       const sessionData = await sessionRes.json();
@@ -600,6 +642,11 @@ function setupIPCHandlers() {
     }
   });
 
+  // Get system number
+  ipcMain.handle('get-system-number', async () => {
+    return SYSTEM_NUMBER;
+  });
+
   // Get system information
   ipcMain.handle('get-system-info', async () => {
     return {
@@ -607,7 +654,9 @@ function setupIPCHandlers() {
       platform: os.platform(),
       arch: os.arch(),
       cpus: os.cpus(),
-      memory: os.totalmem()
+      memory: os.totalmem(),
+      systemNumber: SYSTEM_NUMBER,
+      labId: LAB_ID
     };
   });
 
@@ -921,11 +970,16 @@ try {
 }
 
 app.whenReady().then(() => {
+  setupAutoStart();  // ✅ Setup auto-start for production
   setupIPCHandlers();
   createWindow();
   
-  // 🔒 KIOSK MODE - Block all shortcuts including Alt+Tab
-  blockKioskShortcuts();
+  // 🔒 KIOSK MODE - Block all shortcuts only if kiosk mode is enabled
+  if (KIOSK_MODE) {
+    blockKioskShortcuts();
+  } else {
+    console.log('✅ Shortcut blocking disabled (testing mode)');
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -980,9 +1034,36 @@ function blockKioskShortcuts() {
     'Alt+Space',
     'Super',                     // 🔒 Block Windows key
     'Meta',                      // 🔒 Block Meta key
+    
+    // 🚫 WINDOWS KEY COMBINATIONS - Complete Desktop Access Blocking
+    'Meta+D',                    // 🔒 Show desktop
+    'Meta+E',                    // 🔒 File explorer
+    'Meta+R',                    // 🔒 Run dialog
+    'Meta+L',                    // 🔒 Lock screen
+    'Meta+Tab',                  // 🔒 Task view
+    'Meta+X',                    // 🔒 Power user menu
+    'Meta+I',                    // 🔒 Settings
+    'Meta+A',                    // 🔒 Action center
+    'Meta+S',                    // 🔒 Search
+    'Meta+M',                    // 🔒 Minimize all
+    'Meta+K',                    // 🔒 Connect
+    'Meta+P',                    // 🔒 Project/Display
+    'Meta+U',                    // 🔒 Ease of Access
+    'Meta+B',                    // 🔒 Focus notification area
+    'Meta+Home',                 // 🔒 Minimize non-active
+    
+    // 🚫 ADDITIONAL ESCAPE ROUTES
+    'Esc',                       // 🔒 Escape key variant
+    'Alt+Esc',                   // 🔒 Window cycling
+    'Alt+F6',                    // 🔒 Cycle window elements
+    
+    // 🚫 REFRESH & RELOAD
     'CommandOrControl+R',        // 🔒 Block refresh
     'F5',                        // 🔒 Block F5 refresh
+    'CommandOrControl+F5',       // 🔒 Block force refresh
     'CommandOrControl+Shift+R',  // 🔒 Block hard refresh
+    
+    // 🚫 BROWSER/WINDOW CONTROLS
     'CommandOrControl+N',        // 🔒 Block new window
     'CommandOrControl+T',        // 🔒 Block new tab
     'CommandOrControl+Shift+N',  // 🔒 Block incognito

@@ -12,6 +12,9 @@ const cron = require('node-cron');
 // IP Auto-Detection
 const { detectLocalIP, saveServerConfig } = require('./ip-detector');
 
+// Multi-Lab Configuration
+const { detectLabFromIP, getLabConfig, getAllLabConfigs, isValidLabId } = require('./lab-config');
+
 // NEW: CSV Import Dependencies (using secure ExcelJS instead of xlsx)
 const multer = require('multer');
 const csv = require('csv-parser');
@@ -41,14 +44,25 @@ const io = socketIo(server, {
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// Serve server-config.json for clients to discover server IP
+// Serve server-config.json for clients to discover server IP (BEFORE static files)
 app.get('/server-config.json', (req, res) => {
   const configPath = path.join(__dirname, '..', '..', 'server-config.json');
-  res.sendFile(configPath);
+  if (fs.existsSync(configPath)) {
+    res.sendFile(configPath);
+  } else {
+    // Return default config if file doesn't exist
+    const defaultConfig = {
+      serverIp: detectLocalIP(),
+      serverPort: process.env.PORT || 7401,
+      lastUpdated: new Date().toISOString(),
+      autoDetect: true
+    };
+    res.json(defaultConfig);
+  }
 });
 
-// Serve static files from dashboard directory
-app.use(express.static(path.join(__dirname, '../dashboard')));
+// IMPORTANT: API routes must be defined BEFORE static file middleware
+// Static files will be served last as a catch-all
 
 // Serve student sign-in system
 app.use('/student-signin', express.static(path.join(__dirname, '../../student-signin')));
@@ -275,6 +289,28 @@ const hardwareAlertSchema = new mongoose.Schema({
 });
 
 const HardwareAlert = mongoose.model('HardwareAlert', hardwareAlertSchema);
+
+// System Registry Schema (tracks all powered-on systems, even before student login)
+const systemRegistrySchema = new mongoose.Schema({
+  systemNumber: { type: String, required: true, unique: true }, // e.g., 'CC1-05'
+  labId: { type: String, required: true }, // e.g., 'CC1'
+  ipAddress: { type: String, required: true }, // e.g., '192.168.29.101'
+  status: { type: String, enum: ['available', 'logged-in', 'guest', 'offline'], default: 'available' },
+  lastSeen: { type: Date, default: Date.now },
+  currentSessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Session' },
+  currentStudentId: { type: String },
+  currentStudentName: { type: String },
+  isGuest: { type: Boolean, default: false },
+  socketId: { type: String }
+});
+
+// Update lastSeen on every registry update
+systemRegistrySchema.pre('save', function(next) {
+  this.lastSeen = new Date();
+  next();
+});
+
+const SystemRegistry = mongoose.model('SystemRegistry', systemRegistrySchema);
 
 // Email Configuration - Now enabled for real email sending
 let emailTransporter = null;
@@ -704,12 +740,8 @@ async function importStudentsToDatabase(students) {
   return { successful, failed, errors };
 }
 
-// Serve admin dashboard
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../dashboard/index.html'));
-});
-
 // NEW: Restore sample data (alias for setup-sample-data)
+// Note: Admin dashboard route moved to end of file (after static middleware)
 app.post('/api/restore-sample-data', async (req, res) => {
   try {
     console.log('🗑️ Clearing all existing data...');
@@ -1833,6 +1865,15 @@ app.post('/api/upload-timetable', upload.single('timetableFile'), async (req, re
         // Parse date (format: YYYY-MM-DD)
         const sessionDate = new Date(row['Session Date'] || row.sessionDate);
         
+        // Get and validate lab ID
+        const rawLabId = row['Lab ID'] || row.labId || 'CC1';
+        const labId = String(rawLabId).toUpperCase();
+        
+        // Validate lab ID exists in configuration
+        if (!isValidLabId(labId)) {
+          throw new Error(`Invalid Lab ID: ${labId}. Must be one of: ${Object.keys(getAllLabConfigs()).join(', ')}`);
+        }
+        
         // Create timetable entry
         const timetableEntry = new TimetableEntry({
           sessionDate: sessionDate,
@@ -1840,7 +1881,7 @@ app.post('/api/upload-timetable', upload.single('timetableFile'), async (req, re
           endTime: row['End Time'] || row.endTime,
           faculty: row.Faculty || row.faculty,
           subject: row.Subject || row.subject,
-          labId: (row['Lab ID'] || row.labId).toUpperCase(),
+          labId: labId,
           year: parseInt(row.Year || row.year),
           department: row.Department || row.department,
           section: row.Section || row.section || 'A',
@@ -2367,6 +2408,70 @@ app.get('/api/students', async (req, res) => {
   }
 });
 
+// ========================================================================
+// MULTI-LAB SUPPORT APIs
+// ========================================================================
+
+// Get all lab configurations
+app.get('/api/labs', (req, res) => {
+  try {
+    const labs = getAllLabConfigs();
+    res.json({ success: true, labs });
+  } catch (error) {
+    console.error("Error fetching labs:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get available systems for a specific lab
+app.get('/api/systems/:labId', async (req, res) => {
+  try {
+    const { labId } = req.params;
+    
+    if (!isValidLabId(labId)) {
+      return res.status(400).json({ success: false, error: 'Invalid lab ID' });
+    }
+    
+    // Get all systems for this lab from registry
+    const systems = await SystemRegistry.find({ labId })
+      .sort({ systemNumber: 1 })
+      .lean();
+    
+    // Get lab configuration
+    const labConfig = getLabConfig(labId);
+    
+    // Create complete list with status
+    const systemList = labConfig.systemRange.map(systemNumber => {
+      const registered = systems.find(s => s.systemNumber === systemNumber);
+      return {
+        systemNumber,
+        labId,
+        status: registered?.status || 'offline',
+        ipAddress: registered?.ipAddress || null,
+        lastSeen: registered?.lastSeen || null,
+        currentStudentId: registered?.currentStudentId || null,
+        currentStudentName: registered?.currentStudentName || null,
+        isGuest: registered?.isGuest || false
+      };
+    });
+    
+    res.json({ 
+      success: true, 
+      labId,
+      labName: labConfig.labName,
+      systems: systemList,
+      totalSystems: systemList.length,
+      availableSystems: systemList.filter(s => s.status === 'available').length,
+      loggedInSystems: systemList.filter(s => s.status === 'logged-in').length,
+      guestSystems: systemList.filter(s => s.status === 'guest').length,
+      offlineSystems: systemList.filter(s => s.status === 'offline').length
+    });
+  } catch (error) {
+    console.error("Error fetching systems:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get students by department
 app.get('/api/students/department/:dept', async (req, res) => {
   try {
@@ -2613,29 +2718,7 @@ app.post('/api/clear-all-sessions', async (req, res) => {
 // WebSocket: Socket.io WebRTC signaling
 // Lab Session Management API Endpoints
 
-// Helper function to detect lab from IP address
-function detectLabFromIP(ip) {
-  if (!ip) return 'CC1'; // Default fallback
-  
-  const labIPRanges = {
-    '10.10.46.': 'CC1',
-    '10.10.47.': 'CC2',
-    '10.10.48.': 'CC3',
-    '10.10.49.': 'CC4',
-    '10.10.50.': 'CC5',
-    '192.168.0.': 'CC1',
-    '192.168.1.': 'CC2',
-    '192.168.29.': 'CC1',
-  };
-  
-  for (const [prefix, labId] of Object.entries(labIPRanges)) {
-    if (ip.startsWith(prefix)) {
-      return labId;
-    }
-  }
-  
-  return 'CC1'; // Default
-}
+// Note: detectLabFromIP is now imported from lab-config.js at the top of this file
 
 // Start Lab Session
 app.post('/api/start-lab-session', async (req, res) => {
@@ -3077,6 +3160,10 @@ const adminSockets = new Map();
 
 io.on('connection', (socket) => {
   console.log("✅ Socket connected:", socket.id);
+  
+  // Get client IP address for lab detection
+  const clientIP = socket.handshake.address.replace('::ffff:', ''); // Remove IPv6 prefix if present
+  console.log('🌐 Client IP:', clientIP);
 
   socket.on('computer-online', (data) => { 
     console.log("💻 Computer online:", data); 
@@ -3086,14 +3173,64 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('live-screen', data); 
   });
 
-  socket.on('register-kiosk', ({ sessionId, systemNumber, labId }) => {
-    console.log('📡 Kiosk registered:', sessionId, 'Socket:', socket.id, 'System:', systemNumber, 'Lab:', labId || kioskLabId);
-    kioskSockets.set(sessionId, socket.id);
-    if (systemNumber) {
-      kioskSystemSockets.set(systemNumber, socket.id);
+  // ========================================================================
+  // SYSTEM REGISTRY - Track all powered-on systems (even before login)
+  // ========================================================================
+  socket.on('register-kiosk', async ({ sessionId, systemNumber, labId, ipAddress }) => {
+    try {
+      // Detect lab from IP if not provided
+      const detectedLabId = labId || detectLabFromIP(ipAddress || clientIP);
+      console.log('📡 Kiosk registering:', {
+        sessionId: sessionId || 'PRE-LOGIN',
+        socketId: socket.id,
+        systemNumber,
+        labId: detectedLabId,
+        ipAddress: ipAddress || clientIP
+      });
+      
+      // Register by session ID if available (after login)
+      if (sessionId) {
+        kioskSockets.set(sessionId, socket.id);
+        socket.join(`session-${sessionId}`);
+      }
+      
+      // Always register by system number (works before and after login)
+      if (systemNumber) {
+        kioskSystemSockets.set(systemNumber, socket.id);
+        console.log(`✅ Registered kiosk by system number: ${systemNumber} -> ${socket.id}`);
+        
+        // Update system registry in database
+        await SystemRegistry.findOneAndUpdate(
+          { systemNumber },
+          {
+            systemNumber,
+            labId: detectedLabId,
+            ipAddress: ipAddress || clientIP,
+            status: sessionId ? 'logged-in' : 'available',
+            socketId: socket.id,
+            lastSeen: new Date()
+          },
+          { upsert: true, new: true }
+        );
+        
+        console.log(`✅ System registry updated: ${systemNumber} in lab ${detectedLabId}`);
+        
+        // Broadcast updated system list to all admins
+        const availableSystems = await SystemRegistry.find({ status: { $ne: 'offline' } })
+          .sort({ systemNumber: 1 })
+          .lean();
+        
+        io.to('admins').emit('systems-registry-update', {
+          systems: availableSystems,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      socket.join(`lab-${detectedLabId}`); // Join lab-specific room
+      
+    } catch (error) {
+      console.error('❌ Error in register-kiosk:', error);
     }
-    socket.join(`session-${sessionId}`);
-    socket.join(`lab-${labId || kioskLabId}`); // Join lab-specific room
   });
   
   // Handle kiosk screen ready event
@@ -3109,34 +3246,60 @@ io.on('connection', (socket) => {
     console.log('📡 Notified admins: Kiosk screen ready for session:', sessionId);
   });
 
-  socket.on('admin-offer', ({ offer, sessionId, adminSocketId }) => {
-    const kioskSocketId = kioskSockets.get(sessionId);
-    const isModal = adminSocketId && adminSocketId.includes('-modal');
-    console.log('📹 Admin offer for session:', sessionId, '-> Kiosk:', kioskSocketId, 'Modal:', isModal);
+  socket.on('admin-offer', ({ offer, sessionId, adminSocketId, systemNumber }) => {
+    // Try to find kiosk by sessionId first (after login)
+    let kioskSocketId = sessionId ? kioskSockets.get(sessionId) : null;
     
-    if (!adminSockets.has(sessionId)) {
-      adminSockets.set(sessionId, []);
+    // If not found by sessionId, try by systemNumber (before login or guest mode)
+    if (!kioskSocketId && systemNumber) {
+      kioskSocketId = kioskSystemSockets.get(systemNumber);
+      console.log(`📹 Kiosk found by system number: ${systemNumber} -> ${kioskSocketId}`);
     }
-    if (!adminSockets.get(sessionId).includes(adminSocketId)) {
-      adminSockets.get(sessionId).push(adminSocketId);
+    
+    const isModal = adminSocketId && adminSocketId.includes('-modal');
+    console.log('📹 Admin offer for session:', sessionId || 'PRE-LOGIN', 'System:', systemNumber, '-> Kiosk:', kioskSocketId, 'Modal:', isModal);
+    
+    // Track admin for this session/system
+    const trackingKey = sessionId || systemNumber;
+    if (!adminSockets.has(trackingKey)) {
+      adminSockets.set(trackingKey, []);
+    }
+    if (!adminSockets.get(trackingKey).includes(adminSocketId)) {
+      adminSockets.get(trackingKey).push(adminSocketId);
     }
     
     if (kioskSocketId) {
       console.log('📤 Forwarding offer to kiosk:', kioskSocketId);
-      io.to(kioskSocketId).emit('admin-offer', { offer, sessionId, adminSocketId });
-    } else {
-      console.warn('⚠️ Kiosk not found for session:', sessionId);
-      // Send error back to admin
-      const targetSocketId = adminSocketId.replace('-modal', '');
-      io.to(targetSocketId).emit('webrtc-error', { 
-        sessionId, 
-        error: 'Student not connected' 
+      console.log('📤 Offer params:', {
+        hasOffer: !!offer,
+        sessionId: sessionId || null,
+        adminSocketId: adminSocketId,
+        kioskSocketId: kioskSocketId
       });
+      io.to(kioskSocketId).emit('admin-offer', { offer, sessionId: sessionId || null, adminSocketId });
+      console.log('✅ Offer emitted to kiosk');
+    } else {
+      console.warn('⚠️ Kiosk not found for session:', sessionId, 'or system:', systemNumber);
+      // Send error back to admin (safely handle undefined adminSocketId)
+      if (adminSocketId) {
+        const targetSocketId = adminSocketId.replace('-modal', '');
+        io.to(targetSocketId).emit('webrtc-error', { 
+          sessionId, 
+          error: 'Student not connected' 
+        });
+      }
     }
   });
 
   socket.on('webrtc-answer', ({ answer, adminSocketId, sessionId }) => {
-    console.log('📹 WebRTC answer for admin:', adminSocketId, 'session:', sessionId);
+    console.log('📹 ✅✅✅ SERVER RECEIVED WebRTC answer from kiosk!');
+    console.log('📹 Answer details:', {
+      hasAnswer: !!answer,
+      answerType: answer?.type,
+      adminSocketId: adminSocketId,
+      sessionId: sessionId,
+      kioskSocketId: socket.id
+    });
     
     // Handle both regular and modal admin socket IDs
     let targetSocketId = adminSocketId;
@@ -3145,7 +3308,9 @@ io.on('connection', (socket) => {
       targetSocketId = adminSocketId.replace('-modal', '');
     }
     
+    console.log('📹 Forwarding answer to admin socket:', targetSocketId);
     io.to(targetSocketId).emit('webrtc-answer', { answer, sessionId, adminSocketId });
+    console.log('📹 ✅ Answer forwarded to admin');
   });
 
   socket.on('webrtc-ice-candidate', ({ candidate, sessionId }) => {
@@ -3192,6 +3357,50 @@ io.on('connection', (socket) => {
     console.log(`👨‍💼 Admin registered: ${socket.id} for Lab: ${detectedLabId} (IP: ${adminIP})`);
     socket.join('admins');
     socket.join(`admins-lab-${detectedLabId}`); // Lab-specific admin room
+  });
+
+  // 🔓 GUEST ACCESS: Handle guest access request from admin
+  socket.on('grant-guest-access', async ({ systemNumber, labId }) => {
+    try {
+      console.log(`🔓 Admin requesting guest access for system: ${systemNumber} in lab: ${labId}`);
+      
+      // Find kiosk by system number (works even before login)
+      const kioskSocketId = kioskSystemSockets.get(systemNumber);
+      
+      if (!kioskSocketId) {
+        console.error(`❌ Kiosk not found for system: ${systemNumber}`);
+        socket.emit('guest-access-error', { 
+          systemNumber, 
+          error: `System ${systemNumber} is not connected or not registered` 
+        });
+        return;
+      }
+      
+      console.log(`✅ Found kiosk socket for system ${systemNumber}: ${kioskSocketId}`);
+      
+      // Send guest access command to kiosk
+      io.to(kioskSocketId).emit('guest-access-granted', {
+        systemNumber,
+        labId: labId || 'CC1',
+        timestamp: new Date().toISOString()
+      });
+      
+      console.log(`✅ Guest access command sent to kiosk: ${systemNumber}`);
+      
+      // Notify admin of success
+      socket.emit('guest-access-success', {
+        systemNumber,
+        labId,
+        message: `Guest access granted for ${systemNumber}`
+      });
+      
+    } catch (error) {
+      console.error('❌ Error granting guest access:', error);
+      socket.emit('guest-access-error', {
+        systemNumber,
+        error: error.message || 'Unknown error'
+      });
+    }
   });
 
   socket.on('get-active-sessions', async (data) => {
@@ -3353,6 +3562,86 @@ io.on('connection', (socket) => {
     } catch (error) {
       console.error('❌ Error acknowledging alert:', error);
       socket.emit('alert-acknowledged', { alertId, success: false, error: error.message });
+    }
+  });
+
+  // ========================================================================
+  // GUEST ACCESS / BYPASS LOGIN
+  // ========================================================================
+  
+  socket.on('admin-enable-guest-access', async ({ systemNumber, adminName, labId }) => {
+    try {
+      console.log('🔓 Admin enabling guest access for system:', systemNumber);
+      
+      // Update system registry to mark as guest (even if not yet registered)
+      await SystemRegistry.findOneAndUpdate(
+        { systemNumber },
+        {
+          status: 'guest',
+          isGuest: true,
+          lastSeen: new Date()
+        },
+        { upsert: true, new: true }
+      );
+      
+      // Broadcast to all kiosks - the matching system will respond
+      io.emit('enable-guest-access', {
+        systemNumber: systemNumber,
+        guestPassword: 'admin123',
+        enabledBy: adminName || 'admin',
+        timestamp: new Date().toISOString()
+      });
+      
+      console.log('✅ Guest access command broadcast for system:', systemNumber);
+      
+      // Notify admins that guest mode was enabled
+      io.to('admins').emit('guest-access-enabled', {
+        systemNumber: systemNumber,
+        enabledBy: adminName || 'admin',
+        timestamp: new Date().toISOString()
+      });
+      
+      // Send updated system list to admins
+      const systems = await SystemRegistry.find({ status: { $ne: 'offline' } })
+        .sort({ systemNumber: 1 })
+        .lean();
+      io.to('admins').emit('systems-registry-update', {
+        systems,
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      console.error('❌ Error enabling guest access:', error);
+    }
+  });
+  
+  // Kiosk confirms guest access enabled
+  socket.on('guest-access-confirmed', async ({ systemNumber, studentInfo }) => {
+    try {
+      console.log('✅ Guest access confirmed for system:', systemNumber);
+      
+      // Update system registry
+      await SystemRegistry.findOneAndUpdate(
+        { systemNumber },
+        {
+          status: 'guest',
+          isGuest: true,
+          currentStudentId: 'GUEST',
+          currentStudentName: 'Guest User',
+          lastSeen: new Date()
+        },
+        { upsert: true, new: true }
+      );
+      
+      // Notify all admins that this system is now in guest mode
+      io.to('admins').emit('system-guest-mode-active', {
+        systemNumber: systemNumber,
+        guestInfo: studentInfo,
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      console.error('❌ Error confirming guest access:', error);
     }
   });
 
@@ -4224,6 +4513,74 @@ app.get('/api/manual-reports/:filename', async (req, res) => {
 // =============================================================================
 // END AUTOMATIC REPORT SCHEDULING SYSTEM
 // =============================================================================
+
+// =============================================================================
+// STATIC FILE SERVING (MUST BE LAST - AFTER ALL API ROUTES)
+// =============================================================================
+// Move static file serving to the end to avoid intercepting API routes
+
+// Serve static files from dashboard directory (AFTER all API routes)
+app.use(express.static(path.join(__dirname, '../dashboard')));
+
+// Serve student sign-in system (after API routes)
+app.use('/student-signin', express.static(path.join(__dirname, '../../student-signin')));
+
+// Serve student management system (after API routes)
+app.use('/student-management', express.static(path.join(__dirname, '../../')));
+
+// Serve admin dashboard (fallback route - must be last)
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dashboard/index.html'));
+});
+
+// Guest Access / Bypass Login - Admin initiates guest mode for a kiosk
+app.post('/api/bypass-login', async (req, res) => {
+  try {
+    const { systemId, systemNumber, computerName, labId } = req.body;
+    
+    // Validate required fields
+    if (!systemNumber || !computerName || !labId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: systemNumber, computerName, labId'
+      });
+    }
+
+    console.log(`🔓 Bypass login initiated for ${computerName} (System ${systemNumber}) in lab ${labId}`);
+    
+    // Broadcast guest mode enabled event to the specific kiosk via Socket.io
+    io.emit('guest-mode-enabled', {
+      systemId,
+      systemNumber,
+      computerName,
+      labId,
+      timestamp: new Date()
+    });
+
+    console.log(`📡 Broadcast guest-mode-enabled to system: ${computerName}`);
+    
+    return res.json({
+      success: true,
+      message: `Guest access enabled for ${computerName}`,
+      system: { systemId, systemNumber, computerName, labId }
+    });
+  } catch (error) {
+    console.error('❌ Bypass login error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 404 handler for API routes (after all routes)
+app.use('/api/*', (req, res) => {
+  console.error(`❌ API route not found: ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ 
+    success: false, 
+    error: `API endpoint not found: ${req.method} ${req.originalUrl}` 
+  });
+});
 
 const PORT = process.env.PORT || 7401;
 server.listen(PORT, '0.0.0.0', async () => {

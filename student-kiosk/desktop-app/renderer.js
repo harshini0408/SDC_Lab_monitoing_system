@@ -105,6 +105,25 @@ async function initializeSocket() {
   try {
     await initializeSocket();
     console.log('✅ Socket initialization complete');
+    
+    // Wait for socket to connect
+    await waitForSocketConnection();
+    
+    // Register kiosk with server even before login (for guest access and screen mirroring)
+    const systemNumber = await window.electronAPI?.getSystemNumber?.() || 'CC1-01';
+    const labId = systemNumber.split('-')[0] || 'CC1';
+    
+    console.log('📡 Registering kiosk BEFORE login - System:', systemNumber, 'Lab:', labId);
+    socket.emit('register-kiosk', { 
+      sessionId: null, // No session yet
+      systemNumber, 
+      labId 
+    });
+    
+    // Prepare screen capture even before login (so admin can see login screen)
+    console.log('🎥 Preparing screen capture BEFORE login...');
+    await prepareScreenCapture();
+    
   } catch (err) {
     console.error('❌ Failed to initialize socket:', err);
   }
@@ -143,10 +162,10 @@ window.electronAPI.onSessionCreated(async (data) => {
   
   console.log('✅ Socket is ready, proceeding with session setup');
 
-  // Register this kiosk with backend
-  console.log('📡 Registering kiosk for session:', sessionId);
+  // Register this kiosk with backend (update registration with session ID)
+  console.log('📡 Updating kiosk registration with session:', sessionId);
   // 🔧 MULTI-LAB: Include system number and lab ID for guest access
-  const systemNumber = currentStudentInfo?.systemNumber || 'CC1-01';
+  const systemNumber = currentStudentInfo?.systemNumber || await window.electronAPI?.getSystemNumber?.() || 'CC1-01';
   const labId = systemNumber.split('-')[0] || 'CC1';
   socket.emit('register-kiosk', { sessionId, systemNumber, labId });
 
@@ -209,22 +228,37 @@ async function prepareScreenCapture(retryCount = 0) {
 
     console.log('✅ Screen stream obtained successfully');
     console.log('📊 Stream tracks:', localStream.getTracks().map(t => `${t.kind} (${t.label})`));
+    
+    // IMPORTANT: Keep tracks active by adding onended listeners
+    localStream.getTracks().forEach(track => {
+      track.onended = () => {
+        console.warn('⚠️ Track ended, attempting to restart screen capture...');
+        setTimeout(() => prepareScreenCapture(), 1000);
+      };
+      console.log('✅ Track keeper active:', track.kind, track.readyState);
+    });
+    
     console.log('✅ Ready for admin connections - waiting for offers...');
     
     // CRITICAL: Notify server that kiosk is NOW ready with screen capture
+    // Use current sessionId if available, otherwise use null (for pre-login screen mirroring)
+    const currentSessionId = sessionId || null;
     console.log('\n==============================================');
     console.log('🎉 EMITTING KIOSK-SCREEN-READY EVENT');
-    console.log('Session ID:', sessionId);
+    console.log('Session ID:', currentSessionId || 'PRE-LOGIN');
     console.log('Has Video:', true);
     console.log('==============================================\n');
     
-    socket.emit('kiosk-screen-ready', { 
-      sessionId, 
-      hasVideo: true,
-      timestamp: new Date().toISOString() 
-    });
-    
-    console.log('✅ Screen ready event emitted successfully');
+    if (socket && socket.connected) {
+      socket.emit('kiosk-screen-ready', { 
+        sessionId: currentSessionId, 
+        hasVideo: true,
+        timestamp: new Date().toISOString() 
+      });
+      console.log('✅ Screen ready event emitted successfully');
+    } else {
+      console.warn('⚠️ Socket not connected, cannot emit screen-ready event');
+    }
 
   } catch (error) {
     console.error(`❌ Error preparing screen capture (Attempt ${retryCount + 1}/3):`, error);
@@ -261,22 +295,31 @@ async function prepareScreenCapture(retryCount = 0) {
 
 // Handle admin offer
 async function handleAdminOffer({ offer, sessionId: adminSessionId, adminSocketId }) {
-  console.log('📥 KIOSK: Received admin offer for session:', adminSessionId);
-  console.log('📥 KIOSK: Current sessionId:', sessionId);
+  console.log('📥 KIOSK: Received admin offer for session:', adminSessionId || 'PRE-LOGIN');
+  console.log('📥 KIOSK: Current sessionId:', sessionId || 'NONE (pre-login)');
   console.log('📥 KIOSK: localStream available:', !!localStream);
   console.log('📥 KIOSK: Admin socket ID:', adminSocketId);
   
   // Send immediate acknowledgment
-  socket.emit('offer-received', { sessionId: adminSessionId, adminSocketId, timestamp: new Date().toISOString() });
+  socket.emit('offer-received', { sessionId: adminSessionId || sessionId, adminSocketId, timestamp: new Date().toISOString() });
   
-  if (adminSessionId !== sessionId) {
+  // Allow admin offers even before login (for pre-login screen mirroring)
+  // Only check session ID match if both are set (after login)
+  if (adminSessionId && sessionId && adminSessionId !== sessionId) {
     console.warn('⚠️ Session ID mismatch - admin:', adminSessionId, 'kiosk:', sessionId);
     return;
   }
 
   if (!localStream) {
     console.error('❌ Screen stream not ready - cannot create peer connection');
-    return;
+    // Try to prepare screen capture if not ready
+    console.log('🔄 Attempting to prepare screen capture...');
+    try {
+      await prepareScreenCapture();
+    } catch (err) {
+      console.error('❌ Failed to prepare screen capture:', err);
+      return;
+    }
   }
 
   try {
@@ -300,22 +343,43 @@ async function handleAdminOffer({ offer, sessionId: adminSessionId, adminSocketI
 
     console.log('✅ KIOSK: Peer connection created');
 
-    // Add all tracks from stream
+    // Add all tracks from stream and ensure they're enabled
+    console.log('📊 Adding tracks to peer connection...');
+    let trackCount = 0;
     localStream.getTracks().forEach(track => {
-      pc.addTrack(track, localStream);
-      console.log('➕ Added track to PC:', track.kind, track.label);
+      // Ensure track is enabled and live
+      track.enabled = true;
+      console.log(`➕ Adding track ${++trackCount}:`, {
+        kind: track.kind,
+        label: track.label,
+        readyState: track.readyState,
+        enabled: track.enabled,
+        muted: track.muted
+      });
+      
+      const sender = pc.addTrack(track, localStream);
+      console.log('✅ Track added, sender:', sender ? 'created' : 'FAILED');
+    });
+    
+    console.log(`✅ Total tracks added to peer connection: ${trackCount}`);
+    
+    // Verify senders
+    const senders = pc.getSenders();
+    console.log('📊 Peer connection senders:', senders.length);
+    senders.forEach((sender, i) => {
+      console.log(`  Sender ${i + 1}:`, sender.track ? `${sender.track.kind} (${sender.track.readyState})` : 'NO TRACK');
     });
 
     // Set up event handlers
     pc.onicecandidate = event => {
       if (event.candidate) {
-        console.log('🧊 KIOSK SENDING ICE CANDIDATE');
+        console.log('🧊 KIOSK SENDING ICE CANDIDATE:', event.candidate.type);
         socket.emit('webrtc-ice-candidate', {
           candidate: event.candidate,
           sessionId: sessionId
         });
       } else {
-        console.log('🧊 All ICE candidates sent');
+        console.log('🧊 All ICE candidates sent (null candidate)');
       }
     };
 
@@ -323,12 +387,37 @@ async function handleAdminOffer({ offer, sessionId: adminSessionId, adminSocketI
       console.log('🔗 Kiosk connection state:', pc.connectionState);
       if (pc.connectionState === 'connected') {
         console.log('✅✅✅ KIOSK CONNECTED! VIDEO FLOWING!');
+      } else if (pc.connectionState === 'disconnected') {
+        console.warn('⚠️ Connection disconnected, may reconnect...');
+      } else if (pc.connectionState === 'failed') {
+        console.error('❌ Connection failed! Attempting restart...');
+        setTimeout(() => {
+          if (localStream) {
+            console.log('🔄 Re-emitting screen-ready after connection failure');
+            socket.emit('kiosk-screen-ready', { sessionId, hasVideo: true });
+          }
+        }, 2000);
+      } else if (pc.connectionState === 'closed') {
+        console.warn('⚠️ Connection closed by remote');
       }
     };
 
     pc.oniceconnectionstatechange = () => {
       console.log('🧊 Kiosk ICE state:', pc.iceConnectionState);
+      if (pc.iceConnectionState === 'failed') {
+        console.error('❌ ICE connection failed!');
+      } else if (pc.iceConnectionState === 'disconnected') {
+        console.warn('⚠️ ICE disconnected');
+      }
     };
+    
+    // Monitor track states
+    pc.ontrack = event => {
+      console.log('📹 Track event on peer connection (kiosk):', event.track.kind);
+    };
+    
+    // Log when tracks are added
+    console.log('✅ All event handlers attached to peer connection');
 
     // Set remote description
     console.log('🤝 KIOSK: Setting remote description');
@@ -347,12 +436,23 @@ async function handleAdminOffer({ offer, sessionId: adminSessionId, adminSocketI
     
     // Send answer
     console.log('📤 KIOSK: Sending answer to admin');
+    console.log('📤 KIOSK: Answer details:', {
+      hasAnswer: !!answer,
+      answerType: answer?.type,
+      adminSocketId: adminSocketId,
+      sessionId: sessionId,
+      socketConnected: socket.connected,
+      socketId: socket.id
+    });
+    
     socket.emit('webrtc-answer', { 
       answer, 
       adminSocketId, 
       sessionId 
     });
-    console.log('✅ KIOSK: Answer sent - handshake completed!');
+    
+    console.log('✅ ✅ ✅ KIOSK: Answer EMITTED - handshake completed!');
+    console.log('✅ If you see this, the answer WAS sent from kiosk!');
     
   } catch (error) {
     console.error('❌ KIOSK: Error handling offer:', error);
