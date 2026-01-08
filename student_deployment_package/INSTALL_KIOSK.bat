@@ -16,7 +16,11 @@ xcopy "%~dp0student-kiosk\*" "C:\StudentKiosk\" /E /I /H /Y
 
 REM Copy server config to MULTIPLE locations to ensure it's found
 echo [3/6] Configuring server connection...
-copy "%~dp0server-config.json" "C:\StudentKiosk\server-config.json" /Y
+if exist "%~dp0server-config.json" (
+    copy "%~dp0server-config.json" "C:\StudentKiosk\server-config.json" /Y
+) else (
+    copy "%~dp0server-config.template.json" "C:\StudentKiosk\server-config.json" /Y
+)
 echo Server config copied to C:\StudentKiosk\server-config.json
 
 REM Verify config file exists and show contents
