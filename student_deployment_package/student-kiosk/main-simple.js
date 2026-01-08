@@ -37,12 +37,15 @@ function loadServerUrl() {
   try {
     // Try multiple possible config locations
     const possiblePaths = [
+      path.join(__dirname, 'server-config.json'),  // Same folder as main-simple.js
+      path.join(__dirname, '..', 'server-config.json'),  // Parent folder
+      'C:\\StudentKiosk\\server-config.json',  // Installation directory
       path.join(__dirname, '..', '..', '..', 'server-config.json'),  // From desktop-app folder
-      path.join(app.getAppPath(), '..', '..', '..', 'server-config.json'),  // From app folder
-      'D:\\screen_mirror_deployment_my_laptop\\server-config.json'  // Absolute path
+      path.join(app.getAppPath(), '..', '..', '..', 'server-config.json')  // From app folder
     ];
     
     for (const configPath of possiblePaths) {
+      console.log(`🔍 Checking config at: ${configPath}`);
       if (fs.existsSync(configPath)) {
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         const url = `http://${config.serverIp}:${config.serverPort}`;
@@ -53,10 +56,12 @@ function loadServerUrl() {
       }
     }
     console.warn('⚠️ Config file not found in any expected location');
+    console.warn('⚠️ Checked paths:', possiblePaths);
   } catch (error) {
     console.error('⚠️ Error loading config:', error.message);
   }
   // Fallback to localhost
+  console.warn('⚠️ Using fallback: http://localhost:7401');
   return 'http://localhost:7401';
 }
 
