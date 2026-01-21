@@ -863,6 +863,159 @@
         console.log('🎯 Using fixed server URL:', serverUrl);
         console.log('📍 Admin dashboard configured for server at 10.10.46.103');
 
+        // ============================================================================
+        // SESSION PERSISTENCE - Save/Restore Admin Session State
+        // ============================================================================
+        
+        function saveAdminSessionState() {
+            try {
+                const sessionState = {
+                    sessionActive,
+                    currentLabSession,
+                    sessionEndTime: sessionEndTime ? sessionEndTime.toISOString() : null,
+                    sessionExported,
+                    connectedStudents: Array.from(connectedStudents.entries()),
+                    timestamp: new Date().toISOString()
+                };
+                localStorage.setItem('adminSessionState', JSON.stringify(sessionState));
+                console.log('💾 Admin session state saved to localStorage');
+            } catch (e) {
+                console.error('❌ Failed to save admin session state:', e);
+            }
+        }
+        
+        function restoreAdminSessionState() {
+            try {
+                const savedState = localStorage.getItem('adminSessionState');
+                if (!savedState) {
+                    console.log('ℹ️ No saved admin session state found');
+                    return false;
+                }
+                
+                const sessionState = JSON.parse(savedState);
+                console.log('📦 Found saved admin session state:', sessionState);
+                
+                // Check if saved state is recent (within last 24 hours)
+                const savedTime = new Date(sessionState.timestamp);
+                const now = new Date();
+                const hoursDiff = (now - savedTime) / (1000 * 60 * 60);
+                
+                if (hoursDiff > 24) {
+                    console.log('⏰ Saved session state is too old, clearing...');
+                    localStorage.removeItem('adminSessionState');
+                    return false;
+                }
+                
+                // Restore session state
+                sessionActive = sessionState.sessionActive;
+                currentLabSession = sessionState.currentLabSession;
+                sessionEndTime = sessionState.sessionEndTime ? new Date(sessionState.sessionEndTime) : null;
+                sessionExported = sessionState.sessionExported;
+                
+                // Restore connected students map
+                if (sessionState.connectedStudents) {
+                    connectedStudents = new Map(sessionState.connectedStudents);
+                    console.log(`🔄 Restored ${connectedStudents.size} connected students`);
+                }
+                
+                console.log('✅ Admin session state restored from localStorage');
+                return true;
+            } catch (e) {
+                console.error('❌ Failed to restore admin session state:', e);
+                return false;
+            }
+        }
+        
+        function clearAdminSessionState() {
+            try {
+                localStorage.removeItem('adminSessionState');
+                console.log('🧹 Admin session state cleared from localStorage');
+            } catch (e) {
+                console.error('❌ Failed to clear admin session state:', e);
+            }
+        }
+        
+        // Auto-save session state every 10 seconds
+        setInterval(() => {
+            if (sessionActive || connectedStudents.size > 0) {
+                saveAdminSessionState();
+            }
+        }, 10000);
+        
+        // ============================================================================
+        // RECONNECTION LOGIC - Restore Screen Mirroring After Refresh
+        // ============================================================================
+        
+        async function reconnectToActiveStudents() {
+            console.log('\n============================================================');
+            console.log('🔄 RECONNECTING TO ACTIVE STUDENTS');
+            console.log('============================================================\n');
+            
+            // Wait for socket to be connected
+            if (!socket || !socket.connected) {
+                console.log('⏳ Waiting for socket connection...');
+                await new Promise(resolve => {
+                    const checkConnection = setInterval(() => {
+                        if (socket && socket.connected) {
+                            clearInterval(checkConnection);
+                            resolve();
+                        }
+                    }, 100);
+                });
+            }
+            
+            console.log('✅ Socket connected, requesting active sessions...');
+            
+            // Request active sessions from server
+            socket.emit('get-active-sessions');
+            
+            // Wait for sessions to be loaded
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            console.log(`🔍 Found ${connectedStudents.size} connected students`);
+            
+            // Restart screen mirroring for all connected students
+            if (connectedStudents.size > 0) {
+                console.log('🎥 Restarting screen mirroring for all students...');
+                
+                // Wait for UI to be ready
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Start monitoring for each student
+                let reconnectCount = 0;
+                for (const [sessionId, sessionData] of connectedStudents.entries()) {
+                    console.log(`🎥 Reconnecting to session: ${sessionId} (${sessionData.name})`);
+                    
+                    // Check if video container exists
+                    const videoContainer = document.getElementById(`video-${sessionId}`);
+                    if (videoContainer) {
+                        // Start monitoring after a short delay
+                        setTimeout(() => {
+                            startMonitoring(sessionId);
+                        }, reconnectCount * 500); // Stagger reconnections
+                        reconnectCount++;
+                    } else {
+                        console.warn(`⚠️ Video container not found for session: ${sessionId}`);
+                    }
+                }
+                
+                console.log(`✅ Initiated reconnection for ${reconnectCount} students`);
+                
+                showNotification(
+                    `🔄 SESSION RESTORED\n\n` +
+                    `🎥 Reconnecting screen mirroring for ${reconnectCount} students...`,
+                    'info',
+                    5000
+                );
+            } else {
+                console.log('ℹ️ No students to reconnect');
+            }
+            
+            console.log('\n============================================================');
+            console.log('✅ RECONNECTION PROCESS COMPLETE');
+            console.log('============================================================\n');
+        }
+
         // Initialize socket connection
         async function initializeSocket() {
             console.log('🚀 Admin dashboard loading...');
@@ -878,16 +1031,30 @@
                 socket.emit('join-room', 'admins');
                 console.log('👥 Joined admins room for notifications');
                 
+                // Try to restore previous session state from localStorage
+                const wasRestored = restoreAdminSessionState();
+                
                 loadActiveStudents();
                 
-                // Start automatic refresh every 3 seconds to detect new logins
+                // Always load active sessions and let displayActiveSessions handle monitoring
+                // This ensures screen mirroring starts even after refresh
+                setTimeout(() => {
+                    console.log('🔄 Ensuring all sessions have active monitoring...');
+                    loadActiveStudents();
+                }, 2000);
+                
+                // Start automatic refresh every 10 seconds to detect new logins
                 if (autoRefreshInterval) {
                     clearInterval(autoRefreshInterval);
                 }
                 autoRefreshInterval = setInterval(() => {
                     console.log('🔄 Auto-refreshing sessions...');
                     loadActiveStudents();
-                }, 10000); // Changed from 3000ms to 10000ms (10 seconds)
+                    // Save state during auto-refresh
+                    if (sessionActive || connectedStudents.size > 0) {
+                        saveAdminSessionState();
+                    }
+                }, 10000);
                 console.log('✅ Auto-refresh started (every 10 seconds)');
             });
             
@@ -911,10 +1078,16 @@
                 console.log('📱 New session created:', sessionData);
                 const sessionId = sessionData._id || sessionData.sessionId || sessionData.id;
                 
-                addStudentToGrid(sessionData);
-                updateStats();
+                // Add to grid if not already there
+                if (!connectedStudents.has(sessionId)) {
+                    addStudentToGrid(sessionData);
+                    updateStats();
+                    
+                    // Save session state when new student connects
+                    saveAdminSessionState();
+                }
                 
-                // Auto-start monitoring for new session after short delay
+                // CRITICAL: Start monitoring immediately for new session
                 if (sessionId) {
                     setTimeout(() => {
                         const pc = monitoringConnections.get(sessionId);
@@ -922,11 +1095,18 @@
                         
                         if (!monitoringConnections.has(sessionId) || !isConnected) {
                             console.log('🎥 AUTO-STARTING monitoring for NEW session:', sessionId);
+                            
+                            // Clean up failed connection if exists
+                            if (pc && !isConnected) {
+                                try { pc.close(); } catch(e) {}
+                                monitoringConnections.delete(sessionId);
+                            }
+                            
                             startMonitoring(sessionId);
                         } else {
                             console.log('✅ Monitoring already active for:', sessionId);
                         }
-                    }, 2000);
+                    }, 1000); // Increased delay to ensure UI is ready
                 }
             });
             
@@ -1182,6 +1362,9 @@
                     console.log('✅ Start Session button disabled');
                 }
                 
+                // Mark session as active
+                sessionActive = true;
+                
                 // Play notification sound
                 playAlertSound();
                 
@@ -1194,8 +1377,24 @@
                     });
                 }
                 
-                // Refresh active sessions
-                setTimeout(() => loadActiveStudents(), 1000);
+                // Refresh active sessions and start monitoring for any logged-in students
+                setTimeout(() => {
+                    console.log('🔄 Loading active sessions after auto-start...');
+                    loadActiveStudents();
+                }, 1000);
+                
+                // Keep checking for new student logins every 5 seconds for the first minute
+                let checkCount = 0;
+                const checkInterval = setInterval(() => {
+                    checkCount++;
+                    console.log(`🔄 Auto-check ${checkCount}/12: Checking for new student logins...`);
+                    loadActiveStudents();
+                    
+                    if (checkCount >= 12) {
+                        clearInterval(checkInterval);
+                        console.log('✅ Auto-check complete, relying on normal 10-second refresh');
+                    }
+                }, 5000);
             });
             
             // Listen for automatic session end from timetable
@@ -1369,7 +1568,7 @@
                 return;
             }
             
-            // Don't rebuild grid if sessions haven't changed AND grid is not empty
+            // Always check each session and ensure monitoring is working
             const currentSessionIds = new Set(sessions.map(s => s._id || s.sessionId || s.id));
             const existingSessionIds = new Set(connectedStudents.keys());
             
@@ -1380,41 +1579,42 @@
             // Check if grid has content
             const gridHasStudents = grid.children.length > 0 && !grid.querySelector('.no-students');
             
-            if (!sessionsChanged && gridHasStudents) {
-                console.log('✅ Sessions unchanged and grid populated, skipping rebuild');
+            // ALWAYS verify monitoring for all sessions, even if grid hasn't changed
+            console.log(`🔍 Checking ${sessions.length} sessions for monitoring status...`);
+            sessions.forEach(session => {
+                const sessionId = session._id || session.sessionId || session.id;
+                if (!sessionId) return;
                 
-                // CRITICAL FIX: Ensure monitoring is ACTUALLY WORKING for all sessions
-                sessions.forEach(session => {
-                    const sessionId = session._id || session.sessionId || session.id;
-                    if (!sessionId) return;
+                const hasConnection = monitoringConnections.has(sessionId);
+                const pc = monitoringConnections.get(sessionId);
+                const isConnected = pc && (pc.connectionState === 'connected' || pc.iceConnectionState === 'connected');
+                const videoContainer = document.getElementById(`video-${sessionId}`);
+                const hasVideo = videoContainer && videoContainer.querySelector('video')?.srcObject;
+                
+                // Start monitoring if: no connection, connection failed, or no video stream
+                if (!hasConnection || !isConnected || !hasVideo) {
+                    console.log('🎥 Starting/Restarting monitoring for:', sessionId, {
+                        hasConnection,
+                        isConnected,
+                        hasVideo: !!hasVideo
+                    });
                     
-                    const hasConnection = monitoringConnections.has(sessionId);
-                    const pc = monitoringConnections.get(sessionId);
-                    const isConnected = pc && (pc.connectionState === 'connected' || pc.iceConnectionState === 'connected');
-                    const videoContainer = document.getElementById(`video-${sessionId}`);
-                    const hasVideo = videoContainer && videoContainer.querySelector('video')?.srcObject;
-                    
-                    // Start monitoring if: no connection, connection failed, or no video stream
-                    if (!hasConnection || !isConnected || !hasVideo) {
-                        console.log('🎥 FORCING monitoring start for:', sessionId, {
-                            hasConnection,
-                            isConnected,
-                            hasVideo: !!hasVideo
-                        });
-                        
-                        // Clean up any failed connection
-                        if (pc && !isConnected) {
-                            try { pc.close(); } catch(e) {}
-                            monitoringConnections.delete(sessionId);
-                        }
-                        
-                        // Start monitoring immediately
-                        startMonitoring(sessionId);
-                    } else {
-                        console.log('✅ Monitoring already active and working for:', sessionId);
+                    // Clean up any failed connection
+                    if (pc && !isConnected) {
+                        try { pc.close(); } catch(e) {}
+                        monitoringConnections.delete(sessionId);
                     }
-                });
-                
+                    
+                    // Start monitoring immediately
+                    setTimeout(() => startMonitoring(sessionId), 500);
+                } else {
+                    console.log('✅ Monitoring already active and working for:', sessionId);
+                }
+            });
+            
+            // Only skip grid rebuild if sessions haven't changed AND grid exists
+            if (!sessionsChanged && gridHasStudents) {
+                console.log('✅ Sessions unchanged and grid populated, skipping grid rebuild');
                 updateStats();
                 return;
             }
@@ -2207,9 +2407,22 @@
 
         // Update statistics
         function updateStats() {
-            document.getElementById('totalStudents').textContent = connectedStudents.size;
-            document.getElementById('activeStudents').textContent = connectedStudents.size;
+            // Get unique students based on actual server data, not just local map
+            // This ensures accurate count even with duplicate logins
+            const uniqueStudents = new Set();
+            connectedStudents.forEach((data, sessionId) => {
+                if (data.studentId && data.systemNumber) {
+                    uniqueStudents.add(`${data.studentId}-${data.systemNumber}`);
+                }
+            });
+            
+            const actualActiveCount = uniqueStudents.size;
+            
+            document.getElementById('totalStudents').textContent = actualActiveCount;
+            document.getElementById('activeStudents').textContent = actualActiveCount;
             document.getElementById('monitoringStudents').textContent = monitoringConnections.size;
+            
+            console.log(`📊 Stats updated: ${actualActiveCount} unique students, ${monitoringConnections.size} monitoring`);
         }
 
         // Start lab session
@@ -2427,6 +2640,9 @@
                     console.log('🚀 Lab session started with metadata:', data.session);
                     console.log('🔗 Preserving existing student connections...');
                     
+                    // Save session state to localStorage
+                    saveAdminSessionState();
+                    
                     // Refresh student list without clearing existing connections
                     loadActiveStudents();
                     
@@ -2441,6 +2657,8 @@
                                 console.log('✅ Monitoring already active for:', sessionId);
                             }
                         });
+                        // Save state after starting monitoring
+                        saveAdminSessionState();
                     }, 2000); // 2 second delay to ensure UI is ready
                     
                     alert(`✅ Lab session started successfully!\n\nSubject: ${data.session.subject}\nFaculty: ${data.session.faculty}\nDuration: ${periods} periods (${periods * 50} minutes)\n\nSession will end at: ${sessionEndTime.toLocaleTimeString()}`);
@@ -2677,6 +2895,9 @@
             }
 
             if (confirm('⚠️ Are you sure you want to end the current lab session?\n\nThis will:\n• Stop all screen monitoring\n• Clear all session data\n• Prepare for the next session')) {
+                // Clear session state from localStorage
+                clearAdminSessionState();
+                
                 // Send end session request to server
                 fetch('/api/end-lab-session', {
                     method: 'POST',

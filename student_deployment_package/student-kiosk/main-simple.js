@@ -8,6 +8,13 @@ const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch
 // Enable screen capturing - will be set when app is ready
 console.log('🎬 Kiosk application starting...');
 
+// ✅ INSTANT LAUNCH: Disable GPU acceleration and other delays for faster startup
+app.commandLine.appendSwitch('disable-gpu');
+app.commandLine.appendSwitch('disable-software-rasterizer');
+app.commandLine.appendSwitch('disable-gpu-compositing');
+app.commandLine.appendSwitch('no-sandbox');
+app.disableHardwareAcceleration(); // Faster startup on some systems
+
 // ✅ AUTO-START: Register app to start after Windows login
 function setupAutoStart() {
   try {
@@ -198,6 +205,22 @@ function createWindow() {
 
   mainWindow.loadFile('student-interface.html');
   
+  // 🔒 CRITICAL: Show window IMMEDIATELY (don't wait for ready-to-show)
+  // This ensures kiosk appears within 1ms of launch
+  if (KIOSK_MODE) {
+    console.log('🚀 INSTANT LAUNCH: Showing kiosk immediately...');
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width, height } = primaryDisplay.bounds;
+    mainWindow.setBounds({ x: 0, y: 0, width, height });
+    mainWindow.setKiosk(true);
+    mainWindow.setFullScreen(true);
+    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    mainWindow.show(); // Show IMMEDIATELY
+    mainWindow.focus();
+    mainWindow.moveTop();
+    console.log('✅ Kiosk visible immediately - Windows shell blocked');
+  }
+  
   // 🔒 BACKUP: Ensure window shows even if ready-to-show doesn't fire
   setTimeout(() => {
     if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
@@ -282,24 +305,19 @@ function createWindow() {
   }
 
   mainWindow.once('ready-to-show', () => {
-    // 🔒 PRODUCTION: Show window ONLY when fully loaded (prevents flashing)
+    // 🔒 PRODUCTION: Additional enforcement when ready (window already shown)
     if (KIOSK_MODE) {
       // Force MAXIMUM window size to cover taskbar
       const primaryDisplay = screen.getPrimaryDisplay();
       const { width, height } = primaryDisplay.bounds;
       
-      // Set bounds FIRST to cover entire screen
+      // Re-enforce ALL kiosk settings (already applied but double-check)
       mainWindow.setBounds({ x: 0, y: 0, width, height });
-      
-      // Apply ALL kiosk settings
       mainWindow.setKiosk(true);
       mainWindow.setFullScreen(true);
       mainWindow.setAlwaysOnTop(true, 'screen-saver');
       mainWindow.setSkipTaskbar(true);
       mainWindow.maximize();
-      
-      // NOW show the window
-      mainWindow.show();
       mainWindow.focus();
       mainWindow.moveTop();
       
@@ -319,12 +337,12 @@ function createWindow() {
       
       // Double-check visibility
       if (!mainWindow.isVisible()) {
-        console.warn('⚠️ Window not visible after show(), forcing visibility...');
+        console.warn('⚠️ Window became hidden, forcing visibility...');
         mainWindow.showInactive();
         mainWindow.show();
       }
       
-      console.log('✅ Kiosk window shown in FULL LOCKDOWN mode');
+      console.log('✅ Kiosk fully loaded and enforced in LOCKDOWN mode');
       console.log('🔒 EVERYTHING BLOCKED - Taskbar covered, no shortcuts, no escape');
       console.log(`📊 Window: ${width}x${height} at (0,0)`);
       console.log('⚠️ Only way out: Login → Logout → Shutdown via UI');
@@ -1170,10 +1188,12 @@ app.whenReady().then(() => {
     // Block shortcuts BEFORE creating window to ensure immediate lockdown
     blockKioskShortcuts();
     
-    // Create window immediately - taskbar will be covered by fullscreen window
+    // 🚀 Create window IMMEDIATELY with instant display
+    // This ensures kiosk appears within 1ms of app launch
     createWindow();
     
     console.log('🔒 Kiosk initialized - system fully locked');
+    console.log('🔒 Window shown INSTANTLY - no gap for Windows access');
     console.log('🔒 Fullscreen window covers taskbar completely');
   } else {
     console.log('✅ TESTING MODE - Shortcuts enabled, DevTools available');

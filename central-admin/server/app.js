@@ -2209,11 +2209,25 @@ app.post('/api/student-login', async (req, res) => {
   try {
     const { studentName, studentId, computerName, labId, systemNumber, isGuest } = req.body;
 
-    // End any existing session for this computer
+    // End any existing session for this computer/system to prevent duplicates
+    await Session.updateMany(
+      { systemNumber, status: 'active' }, 
+      { status: 'completed', logoutTime: new Date() }
+    );
+    
+    // Also end any other sessions on this computer name
     await Session.updateMany(
       { computerName, status: 'active' }, 
       { status: 'completed', logoutTime: new Date() }
     );
+    
+    // If same student is logging in again from any system, end previous sessions
+    if (!isGuest && studentId) {
+      await Session.updateMany(
+        { studentId, status: 'active' }, 
+        { status: 'completed', logoutTime: new Date() }
+      );
+    }
 
     const newSession = new Session({ 
       studentName: isGuest ? 'Guest User' : studentName, 
@@ -2262,10 +2276,17 @@ app.post('/api/student-login', async (req, res) => {
       if (activeLabSession) {
         console.log(`📚 Found active lab session: ${activeLabSession.subject} (ID: ${activeLabSession._id})`);
         
-        // Remove any existing record for this system
+        // Remove any existing record for this system to prevent duplicates
         activeLabSession.studentRecords = activeLabSession.studentRecords.filter(
           record => record.systemNumber !== systemNumber
         );
+        
+        // Also remove any existing record for this student to prevent duplicates
+        if (!isGuest && studentId) {
+          activeLabSession.studentRecords = activeLabSession.studentRecords.filter(
+            record => record.studentId !== studentId
+          );
+        }
         
         // Add new student record
         activeLabSession.studentRecords.push({
@@ -2290,6 +2311,7 @@ app.post('/api/student-login', async (req, res) => {
 
     // Notify admins of new session
     io.to('admins').emit('session-created', { 
+      _id: newSession._id,
       sessionId: newSession._id, 
       studentName, 
       studentId, 

@@ -34,16 +34,30 @@ echo [4/6] Installing dependencies (this may take a few minutes)...
 cd /d C:\StudentKiosk
 call npm install
 
-REM Create startup batch file
-echo [5/6] Setting up auto-start...
+REM Create silent VBScript launcher (NO CMD WINDOW)
+echo [5/6] Setting up auto-start with SILENT launcher...
+(
+echo ' Student Kiosk - Silent Launcher
+echo Set WshShell = CreateObject("WScript.Shell"^)
+echo kioskPath = "C:\StudentKiosk"
+echo command = "cmd /c cd /d """ ^& kioskPath ^& """ ^^^&^^^& start /B npm start"
+echo WshShell.Run command, 0, False
+echo Set WshShell = Nothing
+) > "C:\StudentKiosk\START_KIOSK_SILENT.vbs"
+
+REM Create background batch launcher as backup
 (
 echo @echo off
 echo cd /d C:\StudentKiosk
-echo start /min npm start
-) > "C:\StudentKiosk\START_KIOSK.bat"
+echo start /B npm start
+echo exit
+) > "C:\StudentKiosk\START_KIOSK_BACKGROUND.bat"
 
-REM Add to Windows startup
-reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run" /v "StudentKiosk" /t REG_SZ /d "C:\StudentKiosk\START_KIOSK.bat" /f
+REM Add VBScript launcher to Windows startup (NO CMD WINDOW VISIBLE)
+reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run" /v "StudentKiosk" /t REG_SZ /d "wscript.exe \"C:\StudentKiosk\START_KIOSK_SILENT.vbs\"" /f
+
+echo.
+echo ✅ Silent launcher configured - NO CMD WINDOW will be visible!
 
 REM Create desktop shortcut
 echo [6/6] Creating desktop shortcut...
@@ -54,19 +68,27 @@ echo ================================================
 echo   INSTALLATION COMPLETE!
 echo ================================================
 echo.
+echo SECURITY FEATURES ENABLED:
+echo - ✅ Silent launcher - NO CMD window visible
+echo - ✅ Kiosk runs as independent background process
+echo - ✅ Closing any window will NOT terminate kiosk
+echo - ✅ Full-screen lock enabled from startup
+echo.
 echo VERIFICATION:
 echo - Installation folder: C:\StudentKiosk
 echo - Config file: C:\StudentKiosk\server-config.json
 echo - Server IP: 10.10.46.103:7401
+echo - Silent launcher: C:\StudentKiosk\START_KIOSK_SILENT.vbs
 echo.
 echo IMPORTANT - VERIFY CONFIG:
 type "C:\StudentKiosk\server-config.json"
 echo.
 echo Next steps:
 echo 1. Make sure admin server is running at 10.10.46.103:7401
-echo 2. Test manually: cd C:\StudentKiosk && npm start
+echo 2. Test manually: wscript "C:\StudentKiosk\START_KIOSK_SILENT.vbs"
 echo 3. After successful test, restart computer
 echo.
 echo The kiosk will auto-start after restart in FULL LOCKDOWN mode!
+echo NO CMD WINDOW will be visible to students!
 echo.
 pause
