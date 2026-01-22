@@ -1628,8 +1628,12 @@
             // Preserve existing monitoring connections
             const existingConnections = new Map(monitoringConnections);
             
-            grid.innerHTML = '';
-            connectedStudents.clear();
+            // CRITICAL FIX: Only clear grid if sessions actually changed or grid is empty
+            // This prevents losing student data on refresh when nothing changed
+            if (sessionsChanged || !gridHasStudents) {
+                grid.innerHTML = '';
+                connectedStudents.clear();
+            }
             
             console.log('🎥 DISPLAYING sessions and preserving existing connections...');
             

@@ -4395,9 +4395,16 @@ cron.schedule('* * * * *', async () => {
     console.log(`📋 Found ${todayEntries.length} timetable entries for today`);
     
     for (const entry of todayEntries) {
-      // Check if it's time to start the session
-      if (entry.startTime === currentTime && !entry.isProcessed) {
-        console.log(`📅 Timetable trigger: Starting session for ${entry.subject} at ${currentTime}`);
+      // IMPROVED: Start session if current time is AT or AFTER start time but BEFORE end time
+      const [startHour, startMin] = entry.startTime.split(':').map(Number);
+      const [endHour, endMin] = entry.endTime.split(':').map(Number);
+      const startMinutes = startHour * 60 + startMin;
+      const endMinutes = endHour * 60 + endMin;
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      
+      // Check if it's time to start the session (between start and end time, not yet processed)
+      if (currentMinutes >= startMinutes && currentMinutes < endMinutes && !entry.isProcessed) {
+        console.log(`📅 Timetable trigger: Starting session for ${entry.subject} (uploaded late but still within session time)`);
         const result = await autoStartLabSession(entry);
         if (result.success) {
           console.log(`✅ Session auto-started successfully: ${entry.subject}`);
