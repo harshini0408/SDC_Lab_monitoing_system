@@ -320,6 +320,32 @@
                         });
                     });
 
+                    // 🎫 LISTEN FOR SESSION LOGIN SUCCESS - Critical for screen mirroring
+                    socket.on('session-login-success', (data) => {
+                        console.log('✅ Session login success received:', data);
+                        const currentSystem = document.getElementById('systemNumber')?.textContent || 'CC1-01';
+                        
+                        // Only re-register if this is for our system
+                        if (data.systemNumber === currentSystem) {
+                            console.log('🎫 KIOSK: RE-REGISTERING with sessionId for screen mirroring:', data.sessionId);
+                            socket.emit('register-kiosk', {
+                                sessionId: data.sessionId,
+                                systemNumber: data.systemNumber,
+                                labId: data.labId || 'CC1'
+                            });
+                            
+                            // Notify that screen is ready for monitoring
+                            setTimeout(() => {
+                                socket.emit('kiosk-screen-ready', {
+                                    sessionId: data.sessionId,
+                                    hasVideo: true,
+                                    timestamp: new Date().toISOString()
+                                });
+                                console.log('📺 KIOSK: Notified server that screen is ready for monitoring');
+                            }, 1000);
+                        }
+                    });
+
                     // 🔓 GUEST ACCESS / BYPASS LOGIN
                     socket.on('enable-guest-access', async (data) => {
                         const currentSystem = document.getElementById('systemNumber')?.textContent || 'CC1-01';
@@ -367,6 +393,34 @@
                     socket.on('lab-session-ended', (data) => {
                         console.log('⏳ Lab session ended:', data);
                         handleSessionEnded(data);
+                    });
+
+                    // ADMIN REMOTE SHUTDOWN - Execute immediate shutdown
+                    socket.on('execute-shutdown', async () => {
+                        console.log('🔌 ADMIN SHUTDOWN COMMAND RECEIVED');
+                        console.log('⚠️ System will shut down in 10 seconds...');
+                        
+                        // Show immediate warning to student
+                        showError('⚠️ ADMIN SHUTDOWN: This system will shut down in 10 seconds. Please save your work!', 'error');
+                        
+                        // If electronAPI has shutdown method, use it
+                        if (window.electronAPI && window.electronAPI.adminShutdown) {
+                            try {
+                                // 10 second delay to allow student to see warning
+                                await new Promise(resolve => setTimeout(resolve, 10000));
+                                
+                                console.log('🔌 Executing admin-initiated shutdown...');
+                                await window.electronAPI.adminShutdown();
+                            } catch (error) {
+                                console.error('❌ Admin shutdown error:', error);
+                            }
+                        } else {
+                            console.error('❌ Admin shutdown API not available');
+                            // Fallback: just logout and return to kiosk screen
+                            setTimeout(() => {
+                                logout();
+                            }, 10000);
+                        }
                     });
 
                 }).catch(err => console.error('❌ Error getting server URL:', err));
@@ -960,16 +1014,29 @@
             
             if (window.electronAPI && window.electronAPI.studentLogout) {
                 try {
-                    // Show "Initiating shutdown" message using Electron dialog
-                    if (window.electronAPI.showShutdownDialog) {
-                        await window.electronAPI.showShutdownDialog();
-                    }
-                    
+                    // Call logout WITHOUT shutdown - just end session
                     const result = await window.electronAPI.studentLogout();
                     console.log('✅ Logout result:', result);
                     if (result.success) {
-                        console.log('✅ Logout successful, reloading page...');
-                        setTimeout(() => location.reload(), 500);
+                        console.log('✅ Logout successful, returning to kiosk screen...');
+                        
+                        // Hide session modal
+                        document.getElementById('sessionModal').classList.remove('active');
+                        
+                        // Show login container
+                        document.querySelector('.login-container').style.display = 'flex';
+                        
+                        // Clear form fields
+                        document.getElementById('studentId').value = '';
+                        document.getElementById('password').value = '';
+                        
+                        // Reset logging out flag
+                        isLoggingOut = false;
+                        
+                        // Show success message
+                        showError('✅ Logged out successfully. System remains active.', 'success');
+                        
+                        console.log('🔒 Returned to kiosk login screen - system still in kiosk mode');
                     } else {
                         console.error('❌ Logout failed:', result.error);
                         isLoggingOut = false; // Reset flag on failure

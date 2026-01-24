@@ -1076,6 +1076,13 @@
             // Listen for student events
             socket.on('session-created', (sessionData) => {
                 console.log('📱 New session created:', sessionData);
+                
+                // CRITICAL: Only add to grid if this is an actual student login (not pre-login kiosk)
+                if (!sessionData.studentId || !sessionData.studentName) {
+                    console.log('⏭️ Skipping session-created for pre-login kiosk (no student data)');
+                    return;
+                }
+                
                 const sessionId = sessionData._id || sessionData.sessionId || sessionData.id;
                 
                 // Add to grid if not already there
@@ -1559,7 +1566,14 @@
         function displayActiveSessions(sessions) {
             const grid = document.getElementById('studentsGrid');
             
-            if (!sessions || sessions.length === 0) {
+            // CRITICAL FIX: Filter out sessions without proper student login (pre-login kiosks)
+            const actualStudentSessions = sessions ? sessions.filter(s => 
+                s.studentId && s.studentId !== '' && s.studentName && s.studentName !== ''
+            ) : [];
+            
+            console.log(`📊 Total sessions received: ${sessions?.length || 0}, Actual logged-in students: ${actualStudentSessions.length}`);
+            
+            if (!actualStudentSessions || actualStudentSessions.length === 0) {
                 // Only clear if we don't have any existing connections
                 if (connectedStudents.size === 0) {
                     grid.innerHTML = '<div class="no-students">📱 No students connected. Students need to login via kiosk first.</div>';
@@ -1569,7 +1583,7 @@
             }
             
             // Always check each session and ensure monitoring is working
-            const currentSessionIds = new Set(sessions.map(s => s._id || s.sessionId || s.id));
+            const currentSessionIds = new Set(actualStudentSessions.map(s => s._id || s.sessionId || s.id));
             const existingSessionIds = new Set(connectedStudents.keys());
             
             // Check if sessions are the same
@@ -1580,8 +1594,8 @@
             const gridHasStudents = grid.children.length > 0 && !grid.querySelector('.no-students');
             
             // ALWAYS verify monitoring for all sessions, even if grid hasn't changed
-            console.log(`🔍 Checking ${sessions.length} sessions for monitoring status...`);
-            sessions.forEach(session => {
+            console.log(`🔍 Checking ${actualStudentSessions.length} sessions for monitoring status...`);
+            actualStudentSessions.forEach(session => {
                 const sessionId = session._id || session.sessionId || session.id;
                 if (!sessionId) return;
                 
@@ -1637,7 +1651,7 @@
             
             console.log('🎥 DISPLAYING sessions and preserving existing connections...');
             
-            sessions.forEach(session => {
+            actualStudentSessions.forEach(session => {
                 const sessionId = session._id || session.sessionId || session.id;
                 if (sessionId) {
                     connectedStudents.set(sessionId, session);
@@ -1707,6 +1721,12 @@
             
             if (!sessionId) {
                 console.error('❌ No valid session ID found:', sessionData);
+                return;
+            }
+            
+            // CRITICAL: Only add if student has actually logged in (has studentId and studentName)
+            if (!sessionData.studentId || !sessionData.studentName) {
+                console.warn('⚠️ Skipping pre-login kiosk registration (no student data):', sessionData);
                 return;
             }
             
@@ -3590,6 +3610,12 @@ ${data.debug.labSessionStudentRecords?.map((s, i) =>
             
             // Load labs for multi-lab support
             loadAllLabs();
+            
+            // CRITICAL: Restore timetable on page load
+            setTimeout(() => {
+                loadTimetable();
+                console.log('📅 Timetable restoration scheduled');
+            }, 1000);
         });
 
         // Initialize dashboard

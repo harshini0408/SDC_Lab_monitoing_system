@@ -2209,6 +2209,19 @@ app.post('/api/student-login', async (req, res) => {
   try {
     const { studentName, studentId, computerName, labId, systemNumber, isGuest } = req.body;
 
+    // CRITICAL FIX: End ALL existing active sessions for this student to prevent duplicates
+    // This ensures only ONE active session per student at any time
+    if (!isGuest && studentId) {
+      const existingSessions = await Session.find({ studentId, status: 'active' });
+      if (existingSessions.length > 0) {
+        console.log(`🧹 Ending ${existingSessions.length} existing active session(s) for student ${studentId}`);
+        await Session.updateMany(
+          { studentId, status: 'active' }, 
+          { status: 'completed', logoutTime: new Date() }
+        );
+      }
+    }
+    
     // End any existing session for this computer/system to prevent duplicates
     await Session.updateMany(
       { systemNumber, status: 'active' }, 
@@ -2220,14 +2233,6 @@ app.post('/api/student-login', async (req, res) => {
       { computerName, status: 'active' }, 
       { status: 'completed', logoutTime: new Date() }
     );
-    
-    // If same student is logging in again from any system, end previous sessions
-    if (!isGuest && studentId) {
-      await Session.updateMany(
-        { studentId, status: 'active' }, 
-        { status: 'completed', logoutTime: new Date() }
-      );
-    }
 
     const newSession = new Session({ 
       studentName: isGuest ? 'Guest User' : studentName, 
@@ -2319,6 +2324,15 @@ app.post('/api/student-login', async (req, res) => {
       labId, 
       systemNumber, 
       loginTime: newSession.loginTime 
+    });
+
+    // CRITICAL: Notify kiosk to re-register with sessionId for screen mirroring
+    io.emit('session-login-success', { 
+      sessionId: newSession._id,
+      systemNumber,
+      labId,
+      studentId,
+      studentName
     });
 
     io.emit('start-live-stream', { sessionId: newSession._id });
@@ -3492,8 +3506,11 @@ io.on('connection', (socket) => {
       
       console.log(`📋 Admin requesting active sessions for Lab: ${adminLabId}`);
       
-      // Get ALL active sessions first
-      const allActiveSessions = await Session.find({ status: 'active' }).sort({ loginTime: -1 });
+      // Get ALL active sessions first - CRITICAL: Only get sessions with valid studentId (actual logins)
+      const allActiveSessions = await Session.find({ 
+        status: 'active',
+        studentId: { $ne: null, $ne: '' } // Exclude null or empty studentIds (pre-login kiosks)
+      }).sort({ loginTime: -1 });
       console.log(`📊 Total active sessions in DB: ${allActiveSessions.length}`);
       
       // Filter by lab ID (but if none match, return all to avoid empty screen)
