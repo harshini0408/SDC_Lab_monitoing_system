@@ -427,41 +427,91 @@ function createTimerWindow(studentName, studentId) {
     webPreferences: {
       nodeIntegration: true,  // Enable for ipcRenderer in timer
       contextIsolation: false,  // Allow require() in timer window
-      devTools: false  // 🔒 SECURITY: Disable dev tools completely
+      devTools: false,  // 🔒 SECURITY: Disable dev tools completely
+      enableRemoteModule: false,  // 🔒 SECURITY: Disable remote module
+      webSecurity: true  // 🔒 SECURITY: Enable web security
     }
   });
   
-  // 🔒 SECURITY: Block right-click and keyboard shortcuts in timer window
+  // 🔒 CRITICAL SECURITY: Block ALL refresh and DevTools shortcuts in timer window
   timerWindow.webContents.on('before-input-event', (event, input) => {
-    // Block Ctrl+R, Ctrl+Shift+R (refresh)
+    // Block Ctrl+R (refresh) - CRITICAL FIX
     if (input.control && (input.key === 'r' || input.key === 'R')) {
       event.preventDefault();
-      console.log('🚫 Blocked Ctrl+R refresh in timer window');
+      console.log('🚫 BLOCKED: Ctrl+R refresh attempt in timer window');
       return;
     }
-    // Block F5 (refresh)
+    // Block Ctrl+Shift+R (hard refresh)
+    if (input.control && input.shift && (input.key === 'r' || input.key === 'R')) {
+      event.preventDefault();
+      console.log('🚫 BLOCKED: Ctrl+Shift+R hard refresh attempt in timer window');
+      return;
+    }
+    // Block F5 (refresh) - CRITICAL FIX
     if (input.key === 'F5') {
       event.preventDefault();
-      console.log('🚫 Blocked F5 refresh in timer window');
+      console.log('🚫 BLOCKED: F5 refresh attempt in timer window');
       return;
     }
-    // Block F12 (dev tools)
+    // Block Ctrl+F5 (force refresh)
+    if (input.control && input.key === 'F5') {
+      event.preventDefault();
+      console.log('🚫 BLOCKED: Ctrl+F5 force refresh in timer window');
+      return;
+    }
+    // Block F12 (DevTools) - CRITICAL FIX
     if (input.key === 'F12') {
       event.preventDefault();
-      console.log('🚫 Blocked F12 in timer window');
+      console.log('🚫 BLOCKED: F12 DevTools attempt in timer window');
       return;
     }
-    // Block Ctrl+Shift+I (dev tools)
-    if (input.control && input.shift && input.key === 'I') {
+    // Block Ctrl+Shift+I (DevTools) - CRITICAL FIX
+    if (input.control && input.shift && (input.key === 'i' || input.key === 'I')) {
       event.preventDefault();
-      console.log('🚫 Blocked Ctrl+Shift+I in timer window');
+      console.log('🚫 BLOCKED: Ctrl+Shift+I DevTools attempt in timer window');
+      return;
+    }
+    // Block Ctrl+Shift+J (Console)
+    if (input.control && input.shift && (input.key === 'j' || input.key === 'J')) {
+      event.preventDefault();
+      console.log('🚫 BLOCKED: Ctrl+Shift+J Console attempt in timer window');
+      return;
+    }
+    // Block Ctrl+Shift+C (Inspect)
+    if (input.control && input.shift && (input.key === 'c' || input.key === 'C')) {
+      event.preventDefault();
+      console.log('🚫 BLOCKED: Ctrl+Shift+C Inspect attempt in timer window');
+      return;
+    }
+    // Block Ctrl+U (View Source)
+    if (input.control && (input.key === 'u' || input.key === 'U')) {
+      event.preventDefault();
+      console.log('🚫 BLOCKED: Ctrl+U View Source in timer window');
       return;
     }
   });
   
-  // Disable right-click menu
+  // 🔒 CRITICAL: Disable right-click context menu completely
   timerWindow.webContents.on('context-menu', (e) => {
     e.preventDefault();
+    console.log('🚫 BLOCKED: Right-click context menu in timer window');
+  });
+  
+  // 🔒 CRITICAL: Prevent DevTools from opening by any means
+  timerWindow.webContents.on('devtools-opened', () => {
+    timerWindow.webContents.closeDevTools();
+    console.log('🚫 BLOCKED: DevTools forcefully closed in timer window');
+  });
+  
+  // 🔒 CRITICAL: Block navigation/reload attempts
+  timerWindow.webContents.on('will-navigate', (event) => {
+    event.preventDefault();
+    console.log('🚫 BLOCKED: Navigation attempt in timer window');
+  });
+  
+  timerWindow.webContents.on('will-reload', (event) => {
+    event.preventDefault();
+    console.log('🚫 BLOCKED: Reload attempt in timer window');
   });
 
   // HTML content for timer window with Logout button
@@ -680,8 +730,8 @@ async function handleLogoutProcess() {
     
     console.log('🔒 System fully locked after logout - kiosk mode active');
     
-    // � LOGOUT BEHAVIOR: Return to kiosk login (no automatic shutdown)
-    console.log('🔄 Returning to kiosk login screen...');
+    // ✅ CRITICAL FIX: Return to kiosk login screen (DO NOT SHUTDOWN SYSTEM)
+    console.log('🔄 Returning to kiosk login screen - System stays running...');
 
     // Re-enable kiosk shortcut blocking so the machine is locked again
     try {
@@ -691,7 +741,13 @@ async function handleLogoutProcess() {
       console.error('⚠️ Error re-registering kiosk shortcuts:', e.message || e);
     }
     
-    console.log('✅ Ready for next student login');
+    // 🔄 Reload main window to show login screen again (instead of quitting)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.reload();
+      console.log('✅ Kiosk login screen reloaded - Ready for next student');
+    }
+    
+    console.log('✅ System ready for next student login - NO SHUTDOWN');
 
     return { success: true };
   } catch (error) {
@@ -708,13 +764,9 @@ function setupIPCHandlers() {
     // Call the same logout logic as the student-logout handler
     await handleLogoutProcess();
     
-    // Reload main window UI
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('trigger-logout');
-      setTimeout(() => {
-        mainWindow.reload();
-      }, 500);
-    }
+    // ✅ CRITICAL FIX: Reload to login screen (already handled in handleLogoutProcess)
+    // System will NOT shutdown, only return to kiosk login
+    console.log('✅ Timer logout complete - Kiosk login screen active');
   });
   
   // Handle screen sources request
@@ -1223,13 +1275,10 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  // 🔒 KIOSK MODE - Prevent app from quitting
-  if (isKioskLocked) {
-    console.log('🚫 App quit blocked - kiosk mode active');
-    createWindow(); // Recreate window if closed
-  } else if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  // 🔒 CRITICAL FIX: NEVER quit the app in kiosk mode
+  // Always recreate window to prevent system shutdown
+  console.log('🚫 App quit blocked - kiosk mode active, recreating window');
+  createWindow(); // Always recreate window - never quit
 });
 
 app.on('activate', () => {
