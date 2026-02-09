@@ -195,16 +195,36 @@
                     <button type="submit" class="btn-login">
                         <i class="fas fa-unlock"></i> Login
                     </button>
-                </form>
-
-                <button type="button" class="btn-secondary" onclick="showForgotPassword()">
+                </form>                <button type="button" class="btn-secondary" onclick="showForgotPassword()">
                     <i class="fas fa-key"></i> Forgot Password?
                 </button>
 
                 <button type="button" class="btn-secondary" onclick="showFirstTimeSignin()">
                     <i class="fas fa-user-plus"></i> First-time Sign-in
                 </button>
+
+                <button type="button" class="btn-secondary" onclick="showGuestLogin()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                    <i class="fas fa-user-shield"></i> Guest Mode
+                </button>
             </div>
+        </div>
+    </div>
+
+    <!-- Guest Login Modal -->
+    <div class="session-modal" id="guestLoginModal">
+        <div class="session-card">
+            <h1><i class="fas fa-user-shield"></i> Guest Mode Login</h1>
+            <p style="color: #6c757d; margin-bottom: 20px;">Enter the 4-digit guest password provided by your administrator</p>
+            <form id="guestLoginForm">
+                <div class="form-group">
+                    <label class="form-label"><strong>Guest Password (4 digits)</strong></label>
+                    <input type="password" class="form-control" id="guestPassword" placeholder="Enter 4-digit password" maxlength="4" pattern="[0-9]{4}" required style="text-align: center; font-size: 24px; letter-spacing: 8px;">
+                </div>
+                <button type="submit" class="btn btn-primary w-100" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;">
+                    <i class="fas fa-sign-in-alt"></i> Login as Guest
+                </button>
+                <button type="button" class="btn btn-secondary w-100 mt-2" onclick="showLoginPage()">Cancel</button>
+            </form>
         </div>
     </div>
 
@@ -959,12 +979,75 @@
                 console.error('❌ First-time sign-in error:', error);
                 showError('Error: ' + error.message);
             }
+        });        function showLoginPage() {
+            document.querySelector('.login-container').style.display = 'flex';
+            document.getElementById('forgotPasswordModal').classList.remove('active');
+            document.getElementById('firstTimeModal').classList.remove('active');
+            document.getElementById('guestLoginModal').classList.remove('active');
+            document.getElementById('sessionModal').classList.remove('active');
+        }
+
+        function showGuestLogin() {
+            document.querySelector('.login-container').style.display = 'none';
+            document.getElementById('guestLoginModal').classList.add('active');
+            // Clear previous input
+            document.getElementById('guestPassword').value = '';
+        }
+
+        // Guest Login Form Handler
+        document.getElementById('guestLoginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const guestPassword = document.getElementById('guestPassword').value.trim();
+            const systemNumber = document.getElementById('systemNumber').textContent;
+
+            if (!guestPassword || guestPassword.length !== 4) {
+                showError('Please enter a valid 4-digit password');
+                return;
+            }
+
+            console.log(`🔐 Guest login attempt`);
+
+            try {
+                const result = await window.electronAPI.guestLogin({
+                    password: guestPassword,
+                    systemNumber
+                });
+
+                if (result.success) {
+                    console.log(`✅ Guest login successful!`);
+                    console.log(`🎫 KIOSK: Updating registration with sessionId: ${result.sessionId}`);
+                    
+                    // 🎫 RE-REGISTER KIOSK WITH SESSION ID (for screen mirroring)
+                    if (socket && socket.connected) {
+                        socket.emit('register-kiosk', {
+                            sessionId: result.sessionId,
+                            systemNumber: systemNumber,
+                            labId: 'CC1',  // Default lab
+                            isGuest: true
+                        });
+                    }
+                    
+                    document.getElementById('sessionStudentName').textContent = 'Guest User';
+                    document.getElementById('sessionStudentId').textContent = 'GUEST';
+                    document.getElementById('sessionSystem').textContent = systemNumber;
+                    document.getElementById('sessionLoginTime').textContent = new Date().toLocaleTimeString();
+                    document.querySelector('.login-container').style.display = 'none';
+                    document.getElementById('guestLoginModal').classList.remove('active');
+                    document.getElementById('sessionModal').classList.add('active');
+                } else {
+                    showError(result.error || 'Guest login failed. Invalid password.');
+                }
+            } catch (error) {
+                showError('Guest login error: ' + error.message);
+            }
         });
 
         function showLoginPage() {
             document.querySelector('.login-container').style.display = 'flex';
             document.getElementById('forgotPasswordModal').classList.remove('active');
             document.getElementById('firstTimeModal').classList.remove('active');
+            document.getElementById('guestLoginModal').classList.remove('active');
             document.getElementById('sessionModal').classList.remove('active');
         }
 

@@ -133,6 +133,22 @@ const KIOSK_MODE = true; // ✅ ENABLED: Full kiosk lockdown - all shortcuts blo
 let isKioskLocked = true; // ✅ LOCKED: Complete lockdown until student logs in
 
 function createWindow() {
+  // 🔒 FORCE KIOSK LOCK FUNCTION (must be declared FIRST, before any usage)
+  function forceKioskLock() {
+    if (!mainWindow || mainWindow.isDestroyed() || !isKioskLocked) return;
+
+    const { width, height } = screen.getPrimaryDisplay().bounds;
+
+    mainWindow.setBounds({ x: 0, y: 0, width, height });
+    mainWindow.setKiosk(true);
+    mainWindow.setFullScreen(true);
+    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    mainWindow.setSkipTaskbar(true);
+    mainWindow.maximize();
+    mainWindow.focus();
+    mainWindow.moveTop();
+  }
+
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width, height } = primaryDisplay.workAreaSize;
   const { width: screenWidth, height: screenHeight } = primaryDisplay.bounds;
@@ -239,9 +255,7 @@ function createWindow() {
       mainWindow.show();
       mainWindow.focus();
     }
-  }, 3000);
-  
-  // 🔒 BLOCK ESCAPE KEY AT WEBCONTENTS LEVEL (before it can exit fullscreen)
+  }, 3000);    // 🔒 BLOCK ESCAPE KEY AT WEBCONTENTS LEVEL (before it can exit fullscreen)
   if (KIOSK_MODE) {
     mainWindow.webContents.on('before-input-event', (event, input) => {
       // Only block if kiosk is still locked (before login)
@@ -249,53 +263,33 @@ function createWindow() {
         return; // Allow all keys after login
       }
       
-      // Block Escape key
-      if (input.key === 'Escape' || input.key === 'Esc') {
+      // 🚫 CRITICAL: Block ALL key events that could exit kiosk
+      if (
+        input.key === 'Escape' ||
+        input.key === 'Esc' ||
+        input.key === 'F11' ||
+        input.alt ||
+        input.meta
+      ) {
         event.preventDefault();
-        console.log('🚫 Blocked Escape key');
-      }
-      
-      // Block F11 (fullscreen toggle)
-      if (input.key === 'F11') {
-        event.preventDefault();
-        console.log('🚫 Blocked F11');
-      }
-      
-      // Block Alt+Tab and other Alt shortcuts
-      if (input.alt) {
-        event.preventDefault();
-        console.log('🚫 Blocked Alt+' + input.key);
+        if (event.stopImmediatePropagation) {
+          event.stopImmediatePropagation();
+        }
+        console.log('🚫 BLOCKED key:', input.key);
+        return false;
       }
       
       // Block Ctrl+W, Ctrl+Q
       if (input.control && (input.key.toLowerCase() === 'w' || input.key.toLowerCase() === 'q')) {
         event.preventDefault();
-        console.log('🚫 Blocked Ctrl+' + input.key);
-      }
-      
-      // Block Windows key
-      if (input.meta) {
-        event.preventDefault();
-        console.log('🚫 Blocked Windows key');
-      }
+        if (event.stopImmediatePropagation) {
+          event.stopImmediatePropagation();
+        }
+        console.log('🚫 BLOCKED Ctrl+' + input.key);
+        return false;      }
     });
     
-    // 🔒 FOCUS RESTORATION - Only restore when window actually loses focus
-    // Use single-shot restoration instead of aggressive loops to prevent blinking
-    mainWindow.on('blur', () => {
-      // Only restore focus if kiosk is still locked and window exists
-      if (isKioskLocked && !mainWindow.isDestroyed()) {
-        console.log('⚠️ Kiosk window lost focus, restoring...');
-        // Use setTimeout to avoid rapid-fire focus changes
-        setTimeout(() => {
-          if (isKioskLocked && !mainWindow.isDestroyed() && !mainWindow.isFocused()) {
-            mainWindow.focus();
-            mainWindow.setAlwaysOnTop(true, 'screen-saver');
-            console.log('✅ Focus restored');
-          }
-        }, 50);
-      }
-    });
+    // 🔒 NOTE: blur handler is set up later with forceKioskLock
   }
   
   if (KIOSK_MODE) {
@@ -303,7 +297,6 @@ function createWindow() {
   } else {
     console.log('✅ Testing mode - Kiosk disabled');
   }
-
   mainWindow.once('ready-to-show', () => {
     // 🔒 PRODUCTION: Additional enforcement when ready (window already shown)
     if (KIOSK_MODE) {
@@ -317,23 +310,31 @@ function createWindow() {
       mainWindow.setFullScreen(true);
       mainWindow.setAlwaysOnTop(true, 'screen-saver');
       mainWindow.setSkipTaskbar(true);
-      mainWindow.maximize();
-      mainWindow.focus();
+      mainWindow.maximize();      mainWindow.focus();
       mainWindow.moveTop();
       
-      // CRITICAL: Keep enforcing fullscreen to prevent taskbar from appearing
-      setInterval(() => {
-        if (isKioskLocked && !mainWindow.isDestroyed()) {
-          if (!mainWindow.isFullScreen()) {
-            mainWindow.setFullScreen(true);
+      // 🔒 HARD BLOCK ESCAPE AT OS LEVEL (PREVENT TASKBAR FLASH)
+      try {
+        const ok = globalShortcut.register('Escape', () => {
+          if (isKioskLocked) {
+            // swallow Escape completely
+            return;
           }
-          if (!mainWindow.isKiosk()) {
-            mainWindow.setKiosk(true);
-          }
-          // Re-set bounds to ensure complete coverage
-          mainWindow.setBounds({ x: 0, y: 0, width, height });
+        });
+
+        if (ok) {
+          console.log('✅ OS-level Escape blocked');
         }
-      }, 1000);
+      } catch (e) {
+        console.error('❌ Failed to register Escape:', e);
+      }      
+      // CRITICAL: Keep enforcing fullscreen to prevent taskbar from appearing
+      // Check every 100ms (10x per second) for instant re-lock
+      setInterval(() => {
+        if (isKioskLocked) {
+          forceKioskLock();
+        }
+      }, 100); // ⚡ 100ms interval = 10 checks per second for instant re-lock
       
       // Double-check visibility
       if (!mainWindow.isVisible()) {
@@ -349,40 +350,15 @@ function createWindow() {
     } else {
       mainWindow.show();
       mainWindow.focus();
-      mainWindow.webContents.openDevTools();
-      console.log('🔧 Testing mode - DevTools opened');
+      mainWindow.webContents.openDevTools();      console.log('🔧 Testing mode - DevTools opened');
     }
   });
-
+  
   // 🔒 PREVENT ESCAPE FROM EXITING FULLSCREEN/KIOSK (only when locked)
-  // 🔒 PREVENT ESCAPE FROM FULLSCREEN/KIOSK (only when locked)
-  mainWindow.on('leave-full-screen', () => {
-    if (KIOSK_MODE && isKioskLocked) {
-      console.log('🚫 Blocked attempt to exit fullscreen - re-enforcing lock');
-      setTimeout(() => {
-        if (!mainWindow.isDestroyed()) {
-          mainWindow.setKiosk(true);
-          mainWindow.setFullScreen(true);
-          mainWindow.setAlwaysOnTop(true, 'screen-saver');
-          mainWindow.setSkipTaskbar(true);
-          mainWindow.focus();
-        }
-      }, 10);
-    }
-  });
-
-  mainWindow.on('leave-html-full-screen', () => {
-    if (KIOSK_MODE && isKioskLocked) {
-      console.log('🚫 Blocked HTML fullscreen exit - re-enforcing lock');
-      setTimeout(() => {
-        if (!mainWindow.isDestroyed()) {
-          mainWindow.setFullScreen(true);
-          mainWindow.setKiosk(true);
-          mainWindow.focus();
-        }
-      }, 10);
-    }
-  });
+  // 🔒 INSTANT RE-LOCK: No delay, immediate enforcement
+  mainWindow.on('leave-full-screen', forceKioskLock);
+  mainWindow.on('leave-html-full-screen', forceKioskLock);
+  mainWindow.on('blur', forceKioskLock);
   
   console.log(`✅ Application Ready - System: ${SYSTEM_NUMBER}, Lab: ${LAB_ID}`);
   console.log(`✅ Server: ${SERVER_URL}`);
@@ -898,6 +874,100 @@ function setupIPCHandlers() {
     } catch (error) {
       console.error('❌ Login error:', error);
       return { success: false, error: error.message || 'Unknown error' };
+    }  });
+
+  // Handle guest login
+  ipcMain.handle('guest-login', async (event, credentials) => {
+    try {
+      console.log('🔓 Guest mode login attempt');
+
+      // Authenticate guest password
+      const authRes = await fetch(`${SERVER_URL}/api/guest-authenticate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: credentials.password }),
+      });
+      const authData = await authRes.json();
+
+      if (!authData.success) {
+        console.error('❌ Guest authentication failed:', authData.error);
+        return { success: false, error: authData.error || 'Invalid guest password' };
+      }
+
+      console.log('✅ Guest authentication successful');
+
+      // Create session
+      const sessionRes = await fetch(`${SERVER_URL}/api/student-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentName: 'Guest User',
+          studentId: 'GUEST',
+          computerName: os.hostname(),
+          labId: LAB_ID,
+          systemNumber: credentials.systemNumber || SYSTEM_NUMBER,
+          isGuest: true
+        }),
+      });
+      const sessionData = await sessionRes.json();
+
+      if (!sessionData.success) {
+        console.error('❌ Guest session creation failed:', sessionData.error);
+        return { success: false, error: sessionData.error || 'Session creation failed' };
+      }
+
+      console.log('✅ Guest session created:', sessionData.sessionId);
+
+      currentSession = { 
+        id: sessionData.sessionId, 
+        student: { name: 'Guest User', studentId: 'GUEST' },
+        isGuest: true
+      };
+      sessionActive = true;
+      isKioskLocked = false;
+
+      // Unlock system for guest
+      mainWindow.setClosable(false);
+      mainWindow.setMinimizable(true);
+      mainWindow.setAlwaysOnTop(false);
+      mainWindow.setKiosk(false);
+      mainWindow.setFullScreen(false);
+      mainWindow.minimize();
+
+      // Release global shortcuts
+      try {
+        globalShortcut.unregisterAll();
+        console.log('🔓 Kiosk shortcuts unregistered - guest system access granted');
+      } catch (e) {
+        console.error('⚠️ Error unregistering kiosk shortcuts:', e.message || e);
+      }
+
+      console.log('🔓 System unlocked for Guest User');
+
+      // Notify HTML
+      mainWindow.webContents.executeJavaScript('window.postMessage("student-logged-in", "*");');
+
+      // Create timer window
+      createTimerWindow('Guest User', 'GUEST');
+
+      // Start screen streaming
+      setTimeout(() => {
+        console.log('🎬 Sending session-created event to renderer:', sessionData.sessionId);
+        mainWindow.webContents.send('session-created', {
+          sessionId: sessionData.sessionId,
+          isGuest: true
+        });
+      }, 2000);
+
+      return { 
+        success: true, 
+        sessionId: sessionData.sessionId,
+        guest: { name: 'Guest User', studentId: 'GUEST' }
+      };
+
+    } catch (error) {
+      console.error('❌ Guest login error:', error);
+      return { success: false, error: error.message };
     }
   });
 
@@ -1102,90 +1172,7 @@ function setupIPCHandlers() {
     } catch (error) {
       console.error('❌ Guest access error:', error);
       return { success: false, error: error.message || 'Unknown error' };
-    }
-  });
-
-  // Guest login handler (bypass authentication)
-  ipcMain.handle('guest-login', async (event, data) => {
-    try {
-      console.log('🔓 Guest login requested:', data);
-      
-      const sessionRes = await fetch(`${SERVER_URL}/api/student-login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentName: 'Guest User',
-          studentId: 'GUEST',
-          computerName: os.hostname(),
-          labId: data.labId || LAB_ID,
-          systemNumber: data.systemNumber || SYSTEM_NUMBER,
-          isGuest: true
-        }),
-      });
-      const sessionData = await sessionRes.json();
-
-      if (!sessionData.success) {
-        console.error('❌ Guest session creation failed:', sessionData.error);
-        return { success: false, error: sessionData.error || 'Guest session creation failed' };
-      }
-
-      console.log('✅ Guest session created:', sessionData.sessionId);
-
-      currentSession = { id: sessionData.sessionId, student: { name: 'Guest User', studentId: 'GUEST' }, isGuest: true };
-      sessionActive = true;
-      isKioskLocked = false; // Unlock the system
-
-      // After guest login, allow normal window behavior
-      mainWindow.setClosable(false);
-      mainWindow.setMinimizable(true);
-      mainWindow.setAlwaysOnTop(false);
-      mainWindow.setFullScreen(false);
-      mainWindow.maximize();
-
-      // Release all shortcuts
-      try {
-        globalShortcut.unregisterAll();
-        console.log('🔓 Guest mode: shortcuts unregistered - system free for use');
-      } catch (e) {
-        console.error('⚠️ Error unregistering shortcuts:', e.message || e);
-      }
-
-      console.log(`🔓 System unlocked for Guest User`);
-
-      // Create timer window for guest (optional - can be hidden)
-      createTimerWindow('Guest User', 'GUEST');
-
-      // Notify renderer
-      setTimeout(() => {
-        console.log('🎬 Sending guest-session-created event to renderer:', sessionData.sessionId);
-        mainWindow.webContents.send('session-created', {
-          sessionId: sessionData.sessionId,
-          serverUrl: SERVER_URL,
-          studentInfo: {
-            studentId: 'GUEST',
-            studentName: 'Guest User',
-            systemNumber: data.systemNumber || SYSTEM_NUMBER,
-            isGuest: true
-          }
-        });
-      }, 1000);
-
-      return { 
-        success: true, 
-        sessionId: sessionData.sessionId,
-        isGuest: true
-      };
-    } catch (error) {
-      console.error('❌ Guest login error:', error);
-      return { success: false, error: error.message || 'Unknown error' };
-    }
-  });
-
-  // Trigger guest login from renderer
-  ipcMain.on('trigger-guest-login', async () => {
-    console.log('🔓 Trigger guest login from renderer');
-    await ipcMain.handle('guest-login', null, { labId: LAB_ID, systemNumber: SYSTEM_NUMBER });
-  });
+    }  });
 
   // System shutdown handler
   ipcMain.handle('shutdown-system', async () => {
@@ -1302,8 +1289,7 @@ function blockKioskShortcuts() {
     'CommandOrControl+Option+I',
     'CommandOrControl+Option+J'
   ];
-  
-  // Block window management shortcuts
+    // Block window management shortcuts
   const windowShortcuts = [
     'Alt+F4',
     'CommandOrControl+W',
@@ -1311,8 +1297,8 @@ function blockKioskShortcuts() {
     'Alt+Tab',                    // 🔒 Block Alt+Tab (main requirement)
     'Alt+Shift+Tab',             // 🔒 Block reverse Alt+Tab
     'CommandOrControl+Tab',
-    'F11',
-    'Escape'
+    'F11'
+    // NOTE: 'Escape' is registered separately in ready-to-show for OS-level blocking
   ];
   
   // Block system shortcuts

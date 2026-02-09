@@ -174,10 +174,25 @@
             border-color: #007bff;
             box-shadow: 0 4px 8px rgba(0,123,255,0.1);
         }
-        
-        .student-card.monitoring {
+          .student-card.monitoring {
             border-color: #28a745;
             background: #f8fff9;
+        }
+        
+        .student-card.guest {
+            border: 3px solid #667eea;
+            background: linear-gradient(135deg, #f5f7ff 0%, #faf5ff 100%);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+        
+        .student-card.guest:hover {
+            border-color: #764ba2;
+            box-shadow: 0 6px 16px rgba(118, 75, 162, 0.3);
+        }
+        
+        .student-card.guest .student-name {
+            color: #667eea;
+            font-weight: 700;
         }
         
         .student-info h3 {
@@ -485,11 +500,32 @@
     <button onclick="clearTimetable()" class="btn btn-danger">
         🗑️ Clear All Timetable
     </button>
-    
-    <div id="timetableList" style="margin-top: 1rem; background: #f8f9fa; border-radius: 8px; padding: 1rem;">
+      <div id="timetableList" style="margin-top: 1rem; background: #f8f9fa; border-radius: 8px; padding: 1rem;">
         <p style="color: #6c757d;">Timetable entries will appear here after upload...</p>
     </div>
-</div>
+</div>        <!-- Guest Password Display (Admin Only) - Compact Version -->
+        <div class="control-panel" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <div>
+                    <h3 style="color: white; margin: 0; font-size: 1.2rem;">🔓 Guest Password</h3>
+                    <p style="opacity: 0.9; margin: 0.25rem 0 0 0; font-size: 0.85rem;">Today: <span id="guestPasswordDate">Loading...</span></p>
+                </div>
+                <div style="text-align: center; background: rgba(255,255,255,0.95); padding: 0.75rem 1.5rem; border-radius: 8px;">
+                    <div style="color: #667eea; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.25rem;">PASSWORD</div>
+                    <div id="guestPassword" style="font-size: 2rem; font-weight: bold; letter-spacing: 0.3rem; font-family: 'Courier New', monospace; color: #2c3e50;">
+                        ••••
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 0.5rem;">
+                
+                <button onclick="copyGuestPassword()" class="btn btn-secondary" style="background: rgba(255,255,255,0.2); border: 1px solid white; color: white; padding: 0.5rem 1rem; font-size: 0.85rem;">
+                    📋 Copy
+                </button>
+            </div>
+        </div>
+
         <!-- Control Panel -->
         <div class="control-panel">
             <h2>📊 Session Control</h2>
@@ -734,12 +770,12 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        // Global variables
-        let socket;
+        // Global variables        let socket;
         let connectedStudents = new Map();
         let monitoringConnections = new Map();
         // Queue ICE candidates that arrive before remote description is set
-        let pendingICE = new Map(); // sessionId -> Array<RTCIceCandidateInit>        let sessionActive = false;
+        let pendingICE = new Map(); // sessionId -> Array<RTCIceCandidateInit>
+        let sessionActive = false;
         let currentLabSession = null;
         let sessionTimer = null;
         let sessionEndTime = null;
@@ -1616,13 +1652,17 @@
             if (existingCard) {
                 existingCard.remove();
             }
-            
-            const studentCard = document.createElement('div');
+              const studentCard = document.createElement('div');
             studentCard.className = 'student-card';
             studentCard.id = `student-${sessionId}`;
             
             const loginTime = new Date(sessionData.loginTime).toLocaleTimeString();
             const isGuest = sessionData.studentId === 'GUEST' || sessionData.isGuest;
+            
+            // Add guest class for styling
+            if (isGuest) {
+                studentCard.classList.add('guest');
+            }
             
             studentCard.innerHTML = `
                 <div class="student-info">
@@ -3721,10 +3761,85 @@ ${data.debug.labSessionStudentRecords?.map((s, i) =>
                     console.error('Error loading file info:', e);
                 }
             }
-        });
+        });        // =================================================================
+        // END TIMETABLE MANAGEMENT
+        // =================================================================
 
         // =================================================================
-        // END TIMETABLE MANAGEMENT
+        // GUEST PASSWORD MANAGEMENT
+        // =================================================================
+        
+        let currentGuestPassword = '';
+        
+        // Load guest password on page load
+        async function loadGuestPassword() {
+            try {
+                const response = await fetch(`${serverUrl}/api/guest-password`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentGuestPassword = data.password;
+                    document.getElementById('guestPassword').textContent = data.password;
+                    document.getElementById('guestPasswordDate').textContent = new Date(data.date).toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                    });
+                    console.log('✅ Guest password loaded:', data.password);
+                } else {
+                    console.error('❌ Failed to load guest password');
+                    document.getElementById('guestPassword').textContent = 'Error';
+                }
+            } catch (error) {
+                console.error('❌ Error loading guest password:', error);
+                document.getElementById('guestPassword').textContent = 'Error';
+            }
+        }
+        
+        // Refresh guest password
+        async function refreshGuestPassword() {
+            await loadGuestPassword();
+            showNotification('✅ Guest password refreshed', 'success');
+        }
+          // Copy guest password to clipboard
+        async function copyGuestPassword() {
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(currentGuestPassword);
+                    showNotification('📋 Guest password copied to clipboard!', 'success');
+                } else {
+                    // Fallback for browsers without clipboard API
+                    const textArea = document.createElement('textarea');
+                    textArea.value = currentGuestPassword;
+                    textArea.style.position = 'fixed';
+                    textArea.style.left = '-999999px';
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        showNotification('📋 Guest password copied: ' + currentGuestPassword, 'success');
+                    } catch (err) {
+                        showNotification('Password: ' + currentGuestPassword + ' (Copy manually)', 'info');
+                    }
+                    document.body.removeChild(textArea);
+                }
+            } catch (error) {
+                console.error('❌ Failed to copy password:', error);
+                showNotification('Password: ' + currentGuestPassword + ' (Copy manually)', 'info');
+            }
+        }
+        
+        // Load guest password when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadGuestPassword();
+            
+            // Refresh guest password every 5 minutes
+            setInterval(loadGuestPassword, 5 * 60 * 1000);
+        });
+        
+        // =================================================================
+        // END GUEST PASSWORD MANAGEMENT
         // =================================================================
     </script>
 </body>

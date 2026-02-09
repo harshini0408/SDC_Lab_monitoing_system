@@ -124,10 +124,20 @@ const sessionSchema = new mongoose.Schema({
   logoutTime: Date,
   duration: Number,
   status: { type: String, enum: ['active', 'completed'], default: 'active' },
-  screenshot: String
+  screenshot: String,
+  isGuest: { type: Boolean, default: false } // Track if this is a guest login
 });
 
 const Session = mongoose.model('Session', sessionSchema);
+
+// Guest Password Schema (for daily changing guest passwords)
+const guestPasswordSchema = new mongoose.Schema({
+  date: { type: String, required: true, unique: true }, // Format: YYYY-MM-DD
+  password: { type: String, required: true }, // 4-digit password
+  createdAt: { type: Date, default: Date.now }
+});
+
+const GuestPassword = mongoose.model('GuestPassword', guestPasswordSchema);
 
 // Lab Session Schema (for managing entire lab sessions with metadata)
 const labSessionSchema = new mongoose.Schema({
@@ -254,6 +264,48 @@ const timetableEntrySchema = new mongoose.Schema({
 timetableEntrySchema.index({ sessionDate: 1, startTime: 1, labId: 1 });
 
 const TimetableEntry = mongoose.model('TimetableEntry', timetableEntrySchema);
+
+// Guest Password Helper Functions
+function generateGuestPassword() {
+  // Generate a random 4-digit password
+  return Math.floor(1000 + Math.random() * 9000).toString();
+}
+
+async function getTodayGuestPassword() {
+  const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+  
+  let guestPassword = await GuestPassword.findOne({ date: today });
+  
+  if (!guestPassword) {
+    // Generate new password for today
+    const password = generateGuestPassword();
+    guestPassword = await GuestPassword.create({
+      date: today,
+      password: password
+    });
+    console.log(`🔑 Generated new guest password for ${today}: ${password}`);
+  }
+  
+  return guestPassword.password;
+}
+
+// Cleanup old guest passwords (keep last 30 days)
+async function cleanupOldGuestPasswords() {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const result = await GuestPassword.deleteMany({
+      createdAt: { $lt: thirtyDaysAgo }
+    });
+    
+    if (result.deletedCount > 0) {
+      console.log(`🧹 Cleaned up ${result.deletedCount} old guest password(s)`);
+    }
+  } catch (error) {
+    console.error('❌ Error cleaning up old guest passwords:', error);
+  }
+}
 
 // Report Schedule Schema - Updated to support 2 schedules per day
 const reportScheduleSchema = new mongoose.Schema({
@@ -1300,7 +1352,64 @@ app.delete('/api/clear-all-students', async (req, res) => {
     
   } catch (error) {
     console.error('❌ Clear all students error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: error.message });  }
+});
+
+// Guest Mode Authentication
+app.post('/api/guest-authenticate', async (req, res) => {
+  try {
+    const { password } = req.body;
+    
+    if (!password) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Password is required' 
+      });
+    }
+    
+    // Get today's guest password
+    const todayPassword = await getTodayGuestPassword();
+    
+    if (password !== todayPassword) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Invalid guest password' 
+      });
+    }
+    
+    console.log(`✅ Guest authenticated successfully`);
+    
+    res.json({
+      success: true,
+      message: 'Guest authentication successful',
+      guest: {
+        name: 'Guest User',
+        studentId: 'GUEST',
+        isGuest: true
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Guest authentication error:', error);
+    res.status(500).json({ success: false, error: 'Server error during authentication' });
+  }
+});
+
+// Get Today's Guest Password (Admin Only)
+app.get('/api/guest-password', async (req, res) => {
+  try {
+    const todayPassword = await getTodayGuestPassword();
+    const today = new Date().toISOString().split('T')[0];
+    
+    res.json({
+      success: true,
+      date: today,
+      password: todayPassword
+    });
+    
+  } catch (error) {
+    console.error('❌ Error getting guest password:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 
@@ -4989,7 +5098,7 @@ app.post('/api/bypass-login', async (req, res) => {
       timestamp: new Date()
     });
 
-    console.log(`📡 Broadcast guest-mode-enabled to system: ${computerName}`);
+  console.log(`📡 Broadcast guest-mode-enabled to system: ${computerName}`);
     
     return res.json({
       success: true,
@@ -5003,6 +5112,14 @@ app.post('/api/bypass-login', async (req, res) => {
       error: error.message
     });
   }
+});
+
+// =================================================================
+// GUEST PASSWORD CLEANUP - Daily at Midnight
+// =================================================================
+cron.schedule('0 0 * * *', async () => {
+  console.log('🧹 Running daily guest password cleanup...');
+  await cleanupOldGuestPasswords();
 });
 
 // 404 handler for API routes (after all routes)
