@@ -214,9 +214,7 @@
         
         <div id="errorMessage" class="error-message"></div>
         <div id="successMessage" class="success-message"></div>
-        
-        <form id="loginForm" onsubmit="return handleLogin(event)">
-            <div class="input-group">
+          <form id="loginForm" onsubmit="return handleLogin(event)">            <div class="input-group">
                 <label for="passkey">🔑 Enter Admin Passkey</label>
                 <div class="password-wrapper">
                     <input 
@@ -242,23 +240,15 @@
                 <strong>🔒 Security Notice:</strong><br>
                 This is a secure admin area. Only authorized personnel with the correct passkey can access the lab management dashboard.
             </p>
-        </div>
-    </div>
-    
-    <script>
+        </div>    </div>
+      <script>
         // Admin passkey (hashed for basic security)
-        // Default passkey: "admin123" (change this to your desired passkey)
-        // You can generate a new hash by entering: btoa("your_passkey_here") in browser console
+        // Default passkey: "admin123"
         const ADMIN_PASSKEY_HASH = 'YWRtaW4xMjM='; // Base64 encoded "admin123"
-        
-        // Alternative: Use a more secure custom passkey
-        // To set your own passkey, replace the hash above with btoa("your_custom_passkey")
-        // Example for "LAB2024": const ADMIN_PASSKEY_HASH = 'TEFCMJAY';
         
         let loginAttempts = 0;
         const MAX_ATTEMPTS = 5;
-        
-        // Check if already authenticated
+          // Check if already authenticated
         window.addEventListener('load', () => {
             const isAuthenticated = sessionStorage.getItem('adminAuthenticated');
             if (isAuthenticated === 'true') {
@@ -309,8 +299,7 @@
                 // Failed authentication
                 loginAttempts++;
                 const remainingAttempts = MAX_ATTEMPTS - loginAttempts;
-                
-                if (remainingAttempts > 0) {
+                  if (remainingAttempts > 0) {
                     showError(`❌ Invalid passkey! ${remainingAttempts} attempt(s) remaining.`);
                 } else {
                     showError('❌ Maximum attempts reached. Please refresh the page.');

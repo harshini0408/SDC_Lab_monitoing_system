@@ -37,10 +37,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onTriggerLogout: (callback) => {
     ipcRenderer.on('trigger-logout', callback);
   },
-  
-  // System shutdown
+    // System shutdown
   shutdownSystem: () => ipcRenderer.invoke('shutdown-system'),
   showShutdownDialog: () => ipcRenderer.invoke('show-shutdown-dialog'),
+  adminShutdown: () => ipcRenderer.invoke('admin-shutdown'),
+  
+  // 69-SYSTEM LAB - Force Windows shutdown (complete power off)
+  forceWindowsShutdown: () => ipcRenderer.invoke('force-windows-shutdown'),
   
   // 🔓 Guest login (bypass normal authentication)
   guestLogin: (data) => ipcRenderer.invoke('guest-login', data),

@@ -174,25 +174,10 @@
             border-color: #007bff;
             box-shadow: 0 4px 8px rgba(0,123,255,0.1);
         }
-          .student-card.monitoring {
+        
+        .student-card.monitoring {
             border-color: #28a745;
             background: #f8fff9;
-        }
-        
-        .student-card.guest {
-            border: 3px solid #667eea;
-            background: linear-gradient(135deg, #f5f7ff 0%, #faf5ff 100%);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
-        }
-        
-        .student-card.guest:hover {
-            border-color: #764ba2;
-            box-shadow: 0 6px 16px rgba(118, 75, 162, 0.3);
-        }
-        
-        .student-card.guest .student-name {
-            color: #667eea;
-            font-weight: 700;
         }
         
         .student-info h3 {
@@ -446,12 +431,12 @@
         }
     </style>
 </head>
-<body>
-    <!-- Authentication Check -->
+<body>    <!-- Authentication Check -->
     <script>
         // Check if user is authenticated
         (function() {
             const isAuthenticated = sessionStorage.getItem('adminAuthenticated');
+            
             if (isAuthenticated !== 'true') {
                 // Not authenticated, redirect to login
                 console.log('🔒 Access denied - redirecting to login page');
@@ -472,9 +457,7 @@
                 🚪 Logout
             </button>
         </div>
-    </div>
-
-    <div class="main-container">
+    </div>    <div class="main-container">
         <!-- Add this section to admin dashboard -->
 <div class="control-panel">
     <h2>📅 Timetable Management</h2>
@@ -503,26 +486,25 @@
       <div id="timetableList" style="margin-top: 1rem; background: #f8f9fa; border-radius: 8px; padding: 1rem;">
         <p style="color: #6c757d;">Timetable entries will appear here after upload...</p>
     </div>
-</div>        <!-- Guest Password Display (Admin Only) - Compact Version -->
-        <div class="control-panel" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <div>
-                    <h3 style="color: white; margin: 0; font-size: 1.2rem;">🔓 Guest Password</h3>
-                    <p style="opacity: 0.9; margin: 0.25rem 0 0 0; font-size: 0.85rem;">Today: <span id="guestPasswordDate">Loading...</span></p>
-                </div>
-                <div style="text-align: center; background: rgba(255,255,255,0.95); padding: 0.75rem 1.5rem; border-radius: 8px;">
-                    <div style="color: #667eea; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.25rem;">PASSWORD</div>
-                    <div id="guestPassword" style="font-size: 2rem; font-weight: bold; letter-spacing: 0.3rem; font-family: 'Courier New', monospace; color: #2c3e50;">
+</div>        <!-- Compact Guest Password Display -->
+        <div style="position: relative; background: linear-gradient(135deg, #a8e6cf 0%, #dcedc1 100%); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-width: 400px; margin-left: auto; color: #2c5f2d;">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div style="font-size: 2rem;">🔑</div>
+                <div style="flex: 1;">
+                    <div style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 0.3rem; font-weight: 600;">Today's Guest Password</div>
+                    <div id="guestPasswordDisplay" style="font-size: 2rem; font-weight: bold; letter-spacing: 0.5rem; font-family: 'Courier New', monospace; text-shadow: 1px 1px 2px rgba(0,0,0,0.1); color: #1e4620;">
                         ••••
                     </div>
+                    <div id="guestPasswordDate" style="font-size: 0.75rem; opacity: 0.7; margin-top: 0.3rem;">
+                        Loading...
+                    </div>
                 </div>
-            </div>
-            
-            <div style="display: flex; gap: 0.5rem;">
-                
-                <button onclick="copyGuestPassword()" class="btn btn-secondary" style="background: rgba(255,255,255,0.2); border: 1px solid white; color: white; padding: 0.5rem 1rem; font-size: 0.85rem;">
-                    📋 Copy
+                <button onclick="fetchGuestPassword()" style="background: rgba(44, 95, 45, 0.15); border: 2px solid #2c5f2d; color: #2c5f2d; padding: 0.5rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 1.2rem; transition: all 0.3s ease;" onmouseover="this.style.background='rgba(44, 95, 45, 0.25)'" onmouseout="this.style.background='rgba(44, 95, 45, 0.15)'">
+                    🔄
                 </button>
+            </div>
+            <div style="margin-top: 0.75rem; font-size: 0.75rem; opacity: 0.7; text-align: center;">
+                Changes daily at midnight | Share with students
             </div>
         </div>
 
@@ -770,12 +752,12 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        // Global variables        let socket;
+        // Global variables
+        let socket;
         let connectedStudents = new Map();
         let monitoringConnections = new Map();
         // Queue ICE candidates that arrive before remote description is set
-        let pendingICE = new Map(); // sessionId -> Array<RTCIceCandidateInit>
-        let sessionActive = false;
+        let pendingICE = new Map(); // sessionId -> Array<RTCIceCandidateInit>        let sessionActive = false;
         let currentLabSession = null;
         let sessionTimer = null;
         let sessionEndTime = null;
@@ -955,7 +937,32 @@
             
             console.log('\n============================================================');
             console.log('✅ RECONNECTION PROCESS COMPLETE');
-            console.log('============================================================\n');
+            console.log('============================================================\n');        }
+
+        // ============================================================================
+        // GUEST PASSWORD - Fetch and Display Daily 4-Digit Password
+        // ============================================================================
+        
+        async function fetchGuestPassword() {
+            try {
+                console.log('🔑 Fetching today\'s guest password...');
+                const response = await fetch(`${serverUrl}/api/guest-password`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('guestPasswordDisplay').textContent = data.password;
+                    document.getElementById('guestPasswordDate').textContent = `Valid for ${data.formattedDate} | Changes at midnight`;
+                    console.log(`✅ Guest password loaded: ${data.password} (${data.formattedDate})`);
+                } else {
+                    console.error('❌ Failed to fetch guest password');
+                    document.getElementById('guestPasswordDisplay').textContent = 'ERROR';
+                    document.getElementById('guestPasswordDate').textContent = 'Failed to load password';
+                }
+            } catch (error) {
+                console.error('❌ Error fetching guest password:', error);
+                document.getElementById('guestPasswordDisplay').textContent = 'ERROR';
+                document.getElementById('guestPasswordDate').textContent = 'Network error';
+            }
         }
 
         // Initialize socket connection
@@ -1652,17 +1659,13 @@
             if (existingCard) {
                 existingCard.remove();
             }
-              const studentCard = document.createElement('div');
+            
+            const studentCard = document.createElement('div');
             studentCard.className = 'student-card';
             studentCard.id = `student-${sessionId}`;
             
             const loginTime = new Date(sessionData.loginTime).toLocaleTimeString();
             const isGuest = sessionData.studentId === 'GUEST' || sessionData.isGuest;
-            
-            // Add guest class for styling
-            if (isGuest) {
-                studentCard.classList.add('guest');
-            }
             
             studentCard.innerHTML = `
                 <div class="student-info">
@@ -2010,15 +2013,30 @@
                     pendingICE.set(sessionId, queue);
                     console.warn('🧊 ⚠️ ADMIN: No peer connection found; queued ICE candidate for session:', sessionId);
                 }
-        }
-
-        // Expand video to fullscreen
+        }        // Expand video to fullscreen
         function expandVideo(sessionId) {
-            const videoContainer = document.getElementById(`video-${sessionId}`);
-            const video = videoContainer.querySelector('video');
+            console.log('🔍 Expanding video for session:', sessionId);
             
-            if (!video || !video.srcObject) {
+            const videoContainer = document.getElementById(`video-${sessionId}`);
+            if (!videoContainer) {
+                alert('❌ Video container not found.');
+                return;
+            }
+            
+            const video = videoContainer.querySelector('video');
+            if (!video) {
+                alert('❌ No video element found. Start monitoring first.');
+                return;
+            }
+            
+            if (!video.srcObject) {
                 alert('❌ No video stream available. Start monitoring first.');
+                return;
+            }
+            
+            const stream = video.srcObject;
+            if (!stream || stream.getTracks().length === 0) {
+                alert('❌ Video stream has no tracks. Please restart monitoring.');
                 return;
             }
             
@@ -2026,8 +2044,20 @@
             const fullscreenModal = document.getElementById('fullscreen-modal');
             const snapshotBtn = document.getElementById('snapshotBtn');
             
-            // Copy stream to fullscreen video
-            fullscreenVideo.srcObject = video.srcObject;
+            // FIXED: Clone the stream to avoid conflicts
+            const clonedStream = stream.clone();
+            console.log('📹 Cloned stream tracks:', clonedStream.getTracks().map(t => `${t.kind}:${t.readyState}`));
+            
+            // Set the cloned stream to fullscreen video
+            fullscreenVideo.srcObject = clonedStream;
+            
+            // Force play
+            fullscreenVideo.play().then(() => {
+                console.log('✅ Fullscreen video playing');
+            }).catch(err => {
+                console.error('❌ Failed to play fullscreen video:', err);
+                alert('❌ Failed to play video. Please try again.');
+            });
             
             // Store session ID for snapshot
             fullscreenVideo.dataset.sessionId = sessionId;
@@ -2041,7 +2071,7 @@
             
             // Show snapshot button when video is playing
             fullscreenVideo.onplaying = () => {
-                console.log('📸 Video playing - showing snapshot button');
+                console.log('📸 Fullscreen video playing - showing snapshot button');
                 snapshotBtn.style.display = 'block';
             };
             
@@ -2050,7 +2080,8 @@
                 snapshotBtn.style.display = 'none';
             };
             
-            fullscreenVideo.onerror = () => {
+            fullscreenVideo.onerror = (err) => {
+                console.error('❌ Fullscreen video error:', err);
                 snapshotBtn.style.display = 'none';
             };
             
@@ -3409,14 +3440,13 @@ ${data.debug.labSessionStudentRecords?.map((s, i) =>
 
         // =============================================================================
         // END HARDWARE MONITORING FUNCTIONS
-        // =============================================================================
-
-        // Logout function
+        // =============================================================================        // Logout function
         function logout() {
-            if (confirm('🚪 Are you sure you want to logout?\n\nYou will need to enter the passkey again to access the dashboard.')) {
+            if (confirm('🚪 Are you sure you want to logout?\n\nYou will need to enter the daily password again to access the dashboard.')) {
                 console.log('🔓 User logging out...');
                 // Clear authentication
                 sessionStorage.removeItem('adminAuthenticated');
+                sessionStorage.removeItem('authDate');
                 sessionStorage.removeItem('authTime');
                 // Redirect to login page
                 window.location.href = '/admin-login.html';
@@ -3755,91 +3785,18 @@ ${data.debug.labSessionStudentRecords?.map((s, i) =>
             const storedFileInfo = localStorage.getItem('uploadedTimetableInfo');
             if (storedFileInfo) {
                 try {
-                    const fileInfo = JSON.parse(storedFileInfo);
-                    displayUploadedFileInfo(fileInfo);
+                    const fileInfo = JSON.parse(storedFileInfo);                displayUploadedFileInfo(fileInfo);
                 } catch (e) {
                     console.error('Error loading file info:', e);
                 }
             }
-        });        // =================================================================
-        // END TIMETABLE MANAGEMENT
-        // =================================================================
+            
+            // Load guest password on page load
+            fetchGuestPassword();
+        });
 
         // =================================================================
-        // GUEST PASSWORD MANAGEMENT
-        // =================================================================
-        
-        let currentGuestPassword = '';
-        
-        // Load guest password on page load
-        async function loadGuestPassword() {
-            try {
-                const response = await fetch(`${serverUrl}/api/guest-password`);
-                const data = await response.json();
-                
-                if (data.success) {
-                    currentGuestPassword = data.password;
-                    document.getElementById('guestPassword').textContent = data.password;
-                    document.getElementById('guestPasswordDate').textContent = new Date(data.date).toLocaleDateString('en-US', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                    });
-                    console.log('✅ Guest password loaded:', data.password);
-                } else {
-                    console.error('❌ Failed to load guest password');
-                    document.getElementById('guestPassword').textContent = 'Error';
-                }
-            } catch (error) {
-                console.error('❌ Error loading guest password:', error);
-                document.getElementById('guestPassword').textContent = 'Error';
-            }
-        }
-        
-        // Refresh guest password
-        async function refreshGuestPassword() {
-            await loadGuestPassword();
-            showNotification('✅ Guest password refreshed', 'success');
-        }
-          // Copy guest password to clipboard
-        async function copyGuestPassword() {
-            try {
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    await navigator.clipboard.writeText(currentGuestPassword);
-                    showNotification('📋 Guest password copied to clipboard!', 'success');
-                } else {
-                    // Fallback for browsers without clipboard API
-                    const textArea = document.createElement('textarea');
-                    textArea.value = currentGuestPassword;
-                    textArea.style.position = 'fixed';
-                    textArea.style.left = '-999999px';
-                    document.body.appendChild(textArea);
-                    textArea.select();
-                    try {
-                        document.execCommand('copy');
-                        showNotification('📋 Guest password copied: ' + currentGuestPassword, 'success');
-                    } catch (err) {
-                        showNotification('Password: ' + currentGuestPassword + ' (Copy manually)', 'info');
-                    }
-                    document.body.removeChild(textArea);
-                }
-            } catch (error) {
-                console.error('❌ Failed to copy password:', error);
-                showNotification('Password: ' + currentGuestPassword + ' (Copy manually)', 'info');
-            }
-        }
-        
-        // Load guest password when page loads
-        document.addEventListener('DOMContentLoaded', function() {
-            loadGuestPassword();
-            
-            // Refresh guest password every 5 minutes
-            setInterval(loadGuestPassword, 5 * 60 * 1000);
-        });
-        
-        // =================================================================
-        // END GUEST PASSWORD MANAGEMENT
+        // END TIMETABLE MANAGEMENT
         // =================================================================
     </script>
 </body>

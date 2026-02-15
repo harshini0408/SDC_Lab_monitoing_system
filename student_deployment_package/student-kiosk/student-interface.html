@@ -413,9 +413,7 @@
                     socket.on('lab-session-ended', (data) => {
                         console.log('⏳ Lab session ended:', data);
                         handleSessionEnded(data);
-                    });
-
-                    // ADMIN REMOTE SHUTDOWN - Execute immediate shutdown
+                    });                    // ADMIN REMOTE SHUTDOWN - Execute immediate shutdown
                     socket.on('execute-shutdown', async () => {
                         console.log('🔌 ADMIN SHUTDOWN COMMAND RECEIVED');
                         console.log('⚠️ System will shut down in 10 seconds...');
@@ -442,6 +440,91 @@
                             }, 10000);
                         }
                     });
+
+                    // ========================================================================
+                    // 69-SYSTEM LAB - FORCE SHUTDOWN HANDLER (Complete Windows Shutdown)
+                    // ========================================================================
+                    socket.on('force-shutdown-system', async (data) => {
+                        console.log('\n============================================================');
+                        console.log('⚡ FORCE SHUTDOWN COMMAND RECEIVED FROM ADMIN');
+                        console.log('   System:', data.systemNumber || 'Unknown');
+                        console.log('   Timestamp:', data.timestamp);
+                        console.log('   Admin:', data.admin);
+                        console.log('============================================================\n');
+                        
+                        // Show full-screen warning overlay
+                        const warningOverlay = document.createElement('div');
+                        warningOverlay.style.cssText = `
+                            position: fixed;
+                            top: 0;
+                            left: 0;
+                            width: 100%;
+                            height: 100%;
+                            background: linear-gradient(135deg, #dc3545, #c82333);
+                            z-index: 999999;
+                            display: flex;
+                            flex-direction: column;
+                            align-items: center;
+                            justify-content: center;
+                            color: white;
+                            font-family: 'Segoe UI', sans-serif;
+                        `;
+                        
+                        warningOverlay.innerHTML = `
+                            <div style="text-align: center; animation: pulse 1s infinite;">
+                                <h1 style="font-size: 4rem; margin-bottom: 20px;">⚠️ SYSTEM SHUTDOWN</h1>
+                                <h2 style="font-size: 2.5rem; margin-bottom: 40px;">This computer is shutting down...</h2>
+                                <div id="shutdownCountdown" style="font-size: 8rem; font-weight: bold; margin-bottom: 40px;">10</div>
+                                <p style="font-size: 1.5rem;">Please save your work immediately!</p>
+                                <p style="font-size: 1.2rem; margin-top: 20px; opacity: 0.9;">Shutdown initiated by Lab Administrator</p>
+                            </div>
+                            <style>
+                                @keyframes pulse {
+                                    0%, 100% { opacity: 1; }
+                                    50% { opacity: 0.7; }
+                                }
+                            </style>
+                        `;
+                        
+                        document.body.appendChild(warningOverlay);
+                        
+                        // Countdown from 10 to 0
+                        let countdown = 10;
+                        const countdownElement = document.getElementById('shutdownCountdown');
+                        
+                        const countdownInterval = setInterval(() => {
+                            countdown--;
+                            if (countdownElement) {
+                                countdownElement.textContent = countdown;
+                            }
+                            
+                            if (countdown <= 0) {
+                                clearInterval(countdownInterval);
+                            }
+                        }, 1000);
+                        
+                        // Wait 10 seconds then execute shutdown
+                        await new Promise(resolve => setTimeout(resolve, 10000));
+                        
+                        // Execute Windows shutdown command via IPC
+                        if (window.electronAPI && window.electronAPI.forceWindowsShutdown) {
+                            console.log('⚡ Executing Windows shutdown command...');
+                            try {
+                                await window.electronAPI.forceWindowsShutdown();
+                            } catch (error) {
+                                console.error('❌ Shutdown error:', error);
+                            }
+                        } else {
+                            console.error('❌ Force shutdown API not available - attempting fallback');
+                            // Fallback: use old adminShutdown if available
+                            if (window.electronAPI && window.electronAPI.adminShutdown) {
+                                await window.electronAPI.adminShutdown();
+                            }
+                        }
+                    });
+                    // ========================================================================
+                    // END 69-SYSTEM LAB SHUTDOWN HANDLER
+                    // ========================================================================
 
                 }).catch(err => console.error('❌ Error getting server URL:', err));
             } catch (error) {

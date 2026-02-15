@@ -123,6 +123,24 @@ function detectLabFromIP() {
   }
 }
 
+// Helper function to get local IP address
+function getLocalIP() {
+  try {
+    const networkInterfaces = os.networkInterfaces();
+    for (const interfaceName in networkInterfaces) {
+      const addresses = networkInterfaces[interfaceName];
+      for (const addr of addresses) {
+        if (addr.family === 'IPv4' && !addr.internal) {
+          return addr.address;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error getting local IP:', error);
+  }
+  return '0.0.0.0';
+}
+
 const LAB_ID = detectLabFromIP();
 const SYSTEM_NUMBER = process.env.SYSTEM_NUMBER || `${LAB_ID}-${String(Math.floor(Math.random() * 10) + 1).padStart(2, '0')}`;
 
@@ -139,7 +157,7 @@ function createWindow() {
 
     const { width, height } = screen.getPrimaryDisplay().bounds;
 
-    mainWindow.setBounds({ x: 0, y: 0, width, height });
+    mainWindow.setBounds({ x: 0 , y: 0, width, height });
     mainWindow.setKiosk(true);
     mainWindow.setFullScreen(true);
     mainWindow.setAlwaysOnTop(true, 'screen-saver');
@@ -387,18 +405,17 @@ function createTimerWindow(studentName, studentId) {
   }
 
   const { width } = screen.getPrimaryDisplay().workAreaSize;
-  
-  timerWindow = new BrowserWindow({
+    timerWindow = new BrowserWindow({
     width: 350,
     height: 250,  // Increased height for logout button
     x: width - 370,
     y: 20,
-    frame: false,  // 🔒 SECURITY: No frame = No menus
+    frame: true,  // ✅ CHANGED: Enable frame so user can minimize
     title: '⏱️ Active Session Timer',
     alwaysOnTop: true,
     skipTaskbar: false,
-    minimizable: false,  // 🔒 SECURITY: Cannot minimize
-    closable: false,  // Cannot be closed
+    minimizable: true,  // ✅ CHANGED: Allow minimize
+    closable: false,  // 🔒 KEEP: Cannot be closed (must use Logout button)
     resizable: false,
     webPreferences: {
       nodeIntegration: true,  // Enable for ipcRenderer in timer
@@ -496,29 +513,18 @@ function createTimerWindow(studentName, studentId) {
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>Active Session Timer</title>
-      <style>
+      <title>Active Session Timer</title>      <style>
         body {
           margin: 0;
-          padding: 0;
+          padding: 20px;
           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
           background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
           color: white;
           text-align: center;
           user-select: none;
-          -webkit-app-region: drag;  /* Allow dragging window */
-        }
-        .title-bar {
-          background: rgba(0,0,0,0.2);
-          padding: 8px;
-          font-size: 14px;
-          font-weight: bold;
-          -webkit-app-region: drag;  /* Draggable title bar */
-          border-bottom: 1px solid rgba(255,255,255,0.2);
         }
         .content {
-          padding: 15px;
-          -webkit-app-region: no-drag;  /* Content not draggable */
+          padding: 10px;
         }
         h3 {
           margin: 5px 0 10px 0;
@@ -555,13 +561,11 @@ function createTimerWindow(studentName, studentId) {
         }
         .logout-btn:active {
           transform: translateY(0);
-        }
-      </style>
+        }      </style>
     </head>
     <body>
-      <div class="title-bar">⏱️ Active Session Timer</div>
       <div class="content">
-      <h3>Session Active</h3>
+      <h3>⏱️ Session Active</h3>
       <div class="timer" id="timer">00:00:00</div>
       <div class="info">
         <strong>${studentName}</strong><br>
@@ -1204,8 +1208,7 @@ function setupIPCHandlers() {
         // macOS: shutdown in 1 minute
         shutdownCommand = 'sudo shutdown -h +1 "System shutdown initiated by administrator"';
       }
-      
-      console.log(`🔌 Executing shutdown command (90-second delay): ${shutdownCommand}`);
+        console.log(`🔌 Executing shutdown command (90-second delay): ${shutdownCommand}`);
       
       exec(shutdownCommand, (error, stdout, stderr) => {
         if (error) {
@@ -1223,6 +1226,69 @@ function setupIPCHandlers() {
       return { success: false, error: error.message };
     }
   });
+
+  // ========================================================================
+  // 69-SYSTEM LAB - FORCE WINDOWS SHUTDOWN HANDLER
+  // ========================================================================
+  ipcMain.handle('force-windows-shutdown', async () => {
+    try {
+      console.log('\n============================================================');
+      console.log('⚡ FORCE WINDOWS SHUTDOWN INITIATED');
+      console.log('   System:', SYSTEM_NUMBER);
+      console.log('   Time:', new Date().toLocaleString());
+      console.log('============================================================\n');
+      
+      // Perform quick logout if there's an active session (no waiting)
+      if (sessionActive && currentSession) {
+        console.log('🚪 Quick logout before shutdown...');
+        try {
+          await fetch(`${SERVER_URL}/api/student-logout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: currentSession.id })
+          });
+        } catch (err) {
+          console.log('⚠️ Logout skipped (continuing with shutdown)');
+        }
+      }
+      
+      // Import exec for executing system commands
+      const { exec } = require('child_process');
+      
+      // Windows immediate shutdown command (0 second delay)
+      const shutdownCommand = 'shutdown /s /f /t 0';
+      
+      console.log('⚡ Executing IMMEDIATE Windows shutdown...');
+      console.log('   Command: shutdown /s /f /t 0');
+      console.log('   /s = Shutdown');
+      console.log('   /f = Force close applications');
+      console.log('   /t 0 = 0 second delay (immediate)');
+      
+      exec(shutdownCommand, (error, stdout, stderr) => {
+        if (error) {
+          console.error('❌ Shutdown error:', error);
+        } else {
+          console.log('✅ Shutdown command executed - system powering off NOW');
+        }
+      });
+      
+      return { success: true, message: 'System shutting down immediately' };
+    } catch (error) {
+      console.error('❌ Force shutdown error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Admin shutdown handler (legacy - keeping for compatibility)
+  ipcMain.handle('admin-shutdown', async () => {
+    console.log('🔌 Admin shutdown (legacy) - redirecting to force shutdown');
+    const { exec } = require('child_process');
+    exec('shutdown /s /f /t 0');
+    return { success: true };
+  });
+  // ========================================================================
+  // END 69-SYSTEM LAB SHUTDOWN HANDLERS
+  // ========================================================================
 }
 
 // Enable screen capturing before app ready
@@ -1255,6 +1321,48 @@ app.whenReady().then(() => {
     console.log('🔒 Kiosk initialized - system fully locked');
     console.log('🔒 Window shown INSTANTLY - no gap for Windows access');
     console.log('🔒 Fullscreen window covers taskbar completely');
+    
+    // ========================================================================
+    // 69-SYSTEM LAB - HEARTBEAT & SHUTDOWN HANDLER
+    // ========================================================================
+    
+    // Send system heartbeat to server every 30 seconds
+    function sendSystemHeartbeat() {
+      const systemInfo = {
+        systemNumber: SYSTEM_NUMBER,
+        labId: LAB_ID,
+        ipAddress: getLocalIP(),
+        timestamp: new Date().toISOString()
+      };
+      
+      fetch(`${SERVER_URL}/api/system-heartbeat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(systemInfo)
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          console.log(`💓 Heartbeat sent: ${systemInfo.systemNumber} (${systemInfo.ipAddress})`);
+        }
+      })
+      .catch(err => {
+        // Silently fail - don't spam logs
+        if (Math.random() < 0.1) { // Log only 10% of errors
+          console.log('💔 Heartbeat error (network may be down)');
+        }
+      });
+    }
+    
+    // Send heartbeat every 30 seconds
+    setInterval(sendSystemHeartbeat, 30000);
+    sendSystemHeartbeat(); // Send immediately on startup
+    
+    console.log('✅ System heartbeat started (every 30 seconds)');
+    
+    // ========================================================================
+    // END 69-SYSTEM LAB FEATURES
+    // ========================================================================
   } else {
     console.log('✅ TESTING MODE - Shortcuts enabled, DevTools available');
     createWindow();
