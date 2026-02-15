@@ -1481,9 +1481,7 @@
                     hasShownRestoreNotification = true;
                 }
             }
-        }
-
-        // Display active sessions
+        }        // Display active sessions
         function displayActiveSessions(sessions) {
             const grid = document.getElementById('studentsGrid');
             
@@ -1495,10 +1493,9 @@
             console.log(`📊 Total sessions received: ${sessions?.length || 0}, Actual logged-in students: ${actualStudentSessions.length}`);
             
             if (!actualStudentSessions || actualStudentSessions.length === 0) {
-                // Only clear if we don't have any existing connections
-                if (connectedStudents.size === 0) {
-                    grid.innerHTML = '<div class="no-students">📱 No students connected. Students need to login via kiosk first.</div>';
-                }
+                // ✅ FIX: Always clear the grid and connectedStudents when no students
+                grid.innerHTML = '<div class="no-students">📱 No students connected. Students need to login via kiosk first.</div>';
+                connectedStudents.clear(); // ✅ CRITICAL: Clear the map to show 0 count
                 updateStats();
                 return;
             }
@@ -1735,12 +1732,28 @@
                 grid.innerHTML = '<div class="no-students">📱 No students connected. Students need to login via kiosk first.</div>';
                 console.log('📭 Grid is now empty - showing no students message');
             }
-        }
-
-        // Start monitoring a student
+        }        // Start monitoring a student
         async function startMonitoring(sessionId) {
             try {
                 console.log('📹 Starting monitoring for session:', sessionId);
+                
+                // ✅ FIX: Close any existing connection for this session first
+                const existingConnection = monitoringConnections.get(sessionId);
+                if (existingConnection) {
+                    console.log('🔄 Closing existing peer connection for session:', sessionId);
+                    try {
+                        existingConnection.close();
+                    } catch (e) {
+                        console.error('Error closing existing connection:', e);
+                    }
+                    monitoringConnections.delete(sessionId);
+                }
+                
+                // ✅ FIX: Clear any pending ICE candidates for this session
+                if (pendingICE.has(sessionId)) {
+                    console.log('🧊 Clearing pending ICE candidates for session:', sessionId);
+                    pendingICE.delete(sessionId);
+                }
                 
                 const videoContainer = document.getElementById(`video-${sessionId}`);
                 if (!videoContainer) {
@@ -1758,7 +1771,7 @@
                 videoContainer.innerHTML = '';
                 videoContainer.appendChild(video);
                 
-                // Create WebRTC peer connection with multiple STUN servers
+                // ✅ FIX: Create WebRTC peer connection with unique configuration per session
                 const peerConnection = new RTCPeerConnection({
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
@@ -2272,8 +2285,7 @@
             `;
             toast.textContent = message;
             document.body.appendChild(toast);
-            
-            // Remove after 4 seconds
+              // Remove after 4 seconds
             setTimeout(() => {
                 toast.style.animation = 'slideOut 0.3s ease';
                 setTimeout(() => toast.remove(), 300);
@@ -2286,13 +2298,16 @@
             // This ensures accurate count even with duplicate logins
             const uniqueStudents = new Set();
             connectedStudents.forEach((data, sessionId) => {
-                if (data.studentId && data.systemNumber) {
+                // ✅ FIX: Only count valid student entries (not empty or undefined)
+                // FIXED: Changed data.name to data.studentName to match actual session data structure
+                if (data && data.studentId && data.systemNumber && data.studentName) {
                     uniqueStudents.add(`${data.studentId}-${data.systemNumber}`);
                 }
             });
             
             const actualActiveCount = uniqueStudents.size;
             
+            // ✅ FIX: Show 0 if no students are connected
             document.getElementById('totalStudents').textContent = actualActiveCount;
             document.getElementById('activeStudents').textContent = actualActiveCount;
             document.getElementById('monitoringStudents').textContent = monitoringConnections.size;

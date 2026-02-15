@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔧 Timetable Auto-Start Fixes - Visual Test Guide</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .status-banner {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            margin-bottom: 40px;
+            box-shadow: 0 10px 30px rgba(17, 153, 142, 0.3);
+        }
+
+        .status-banner h2 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .issue-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border-left: 6px solid #667eea;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .issue-card h3 {
+            color: #667eea;
+            font-size: 1.8em;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .issue-card .status-badge {
+            background: #38ef7d;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.6em;
+            font-weight: bold;
+        }
+
+        .problem-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+        }
+
+        .problem-box h4 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        .solution-box {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+        }
+
+        .solution-box h4 {
+            color: #155724;
+            margin-bottom: 10px;
+        }
+
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+
+        .code-block .comment {
+            color: #6a9955;
+        }
+
+        .code-block .keyword {
+            color: #569cd6;
+        }
+
+        .code-block .function {
+            color: #dcdcaa;
+        }
+
+        .code-block .string {
+            color: #ce9178;
+        }
+
+        .test-scenario {
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .test-scenario h4 {
+            color: #667eea;
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .test-steps {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 15px 0;
+        }
+
+        .test-steps ol {
+            margin-left: 20px;
+        }
+
+        .test-steps li {
+            margin: 10px 0;
+            padding-left: 10px;
+        }
+
+        .expected-result {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+        }
+
+        .expected-result h5 {
+            color: #2e7d32;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .log-output {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            overflow-x: auto;
+            margin: 15px 0;
+            line-height: 1.6;
+        }
+
+        .log-output .success {
+            color: #4ec9b0;
+        }
+
+        .log-output .warning {
+            color: #ce9178;
+        }
+
+        .log-output .info {
+            color: #569cd6;
+        }
+
+        .log-output .time {
+            color: #b5cea8;
+        }
+
+        .timeline {
+            position: relative;
+            padding: 20px 0;
+            margin: 30px 0;
+        }
+
+        .timeline-item {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: 20px;
+            top: 40px;
+            bottom: -30px;
+            width: 2px;
+            background: #667eea;
+        }
+
+        .timeline-item:last-child::before {
+            display: none;
+        }
+
+        .timeline-marker {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            flex-shrink: 0;
+            box-shadow: 0 4px 10px rgba(102, 126, 234, 0.4);
+        }
+
+        .timeline-content {
+            flex: 1;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .timeline-content h5 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .comparison-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: bold;
+        }
+
+        .comparison-table td {
+            padding: 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .comparison-table tr:hover {
+            background: #f5f5f5;
+        }
+
+        .comparison-table .before {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .comparison-table .after {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .action-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: bold;
+            margin: 10px;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .checklist {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            margin: 10px 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .checklist-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+
+        .checklist-item input[type="checkbox"] {
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+        }
+
+        .emoji {
+            font-size: 1.5em;
+        }
+
+        .alert-box {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .alert-box h4 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .issue-card {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 Timetable Auto-Start Fixes</h1>
+            <p>Complete Visual Testing Guide - February 15, 2026</p>
+        </div>
+
+        <div class="content">
+            <div class="status-banner">
+                <h2>✅ ALL FIXES APPLIED</h2>
+                <p style="font-size: 1.2em; margin-top: 10px;">3 Critical Issues Resolved</p>
+            </div>
+
+            <!-- Issue 1 -->
+            <div class="issue-card">
+                <h3>
+                    <span class="emoji">🚀</span>
+                    Issue #1: Sessions Not Auto-Starting When Timetable Uploaded
+                    <span class="status-badge">FIXED</span>
+                </h3>
+
+                <div class="problem-box">
+                    <h4>❌ Problem</h4>
+                    <p>When you upload a timetable with a session scheduled for 11:34, and you upload it at 11:40 (after start time but before end time), the session doesn't auto-start immediately.</p>
+                </div>
+
+                <div class="solution-box">
+                    <h4>✅ Solution</h4>
+                    <p>Changed the upload logic to check SYNCHRONOUSLY if any sessions should start immediately. No more setTimeout delays - the check happens before sending the response.</p>
+                </div>
+
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Aspect</th>
+                            <th>Before (Broken)</th>
+                            <th>After (Fixed)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Upload Time</strong></td>
+                            <td class="before">11:40 (6 min late)</td>
+                            <td class="after">11:40 (6 min late)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Session Time</strong></td>
+                            <td>11:34 - 12:30</td>
+                            <td>11:34 - 12:30</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Behavior</strong></td>
+                            <td class="before">❌ Waits until next day</td>
+                            <td class="after">✅ Starts IMMEDIATELY</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Delay</strong></td>
+                            <td class="before">2 seconds (setTimeout)</td>
+                            <td class="after">0 seconds (synchronous)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="code-block">
+<span class="comment">// ✅ NEW: Synchronous immediate start check</span>
+<span class="keyword">const</span> currentMinutes = now.getHours() * <span class="string">60</span> + now.getMinutes();
+<span class="keyword">const</span> startMinutes = startHour * <span class="string">60</span> + startMin;
+<span class="keyword">const</span> endMinutes = endHour * <span class="string">60</span> + endMin;
+
+<span class="keyword">if</span> (currentMinutes >= startMinutes && currentMinutes < endMinutes) {
+  <span class="comment">// Start session immediately!</span>
+  <span class="keyword">await</span> <span class="function">autoStartLabSession</span>(entry);
+}
+                </div>
+            </div>
+
+            <!-- Issue 2 -->
+            <div class="issue-card">
+                <h3>
+                    <span class="emoji">📋</span>
+                    Issue #2: Uploaded Timetable Not Showing in Upcoming Sessions
+                    <span class="status-badge">FIXED</span>
+                </h3>
+
+                <div class="problem-box">
+                    <h4>❌ Problem</h4>
+                    <p>After uploading a timetable, entries don't appear in the "Upcoming Sessions" tab even though they're saved in the database.</p>
+                </div>
+
+                <div class="solution-box">
+                    <h4>✅ Solution</h4>
+                    <p>Fixed the date comparison to use date-only (midnight) instead of datetime. Now properly shows all today's unprocessed sessions.</p>
+                </div>
+
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Filter Type</th>
+                            <th>Before (Broken)</th>
+                            <th>After (Fixed)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Date Filter</strong></td>
+                            <td class="before">sessionDate >= new Date()</td>
+                            <td class="after">sessionDate >= today (midnight)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Example</strong></td>
+                            <td class="before">2026-02-15 11:40:00</td>
+                            <td class="after">2026-02-15 00:00:00</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Result</strong></td>
+                            <td class="before">❌ Past sessions filtered out</td>
+                            <td class="after">✅ All today's sessions shown</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="code-block">
+<span class="comment">// ✅ NEW: Date-only comparison</span>
+<span class="keyword">if</span> (upcoming === <span class="string">'true'</span>) {
+  <span class="keyword">const</span> today = <span class="keyword">new</span> Date();
+  today.<span class="function">setHours</span>(<span class="string">0</span>, <span class="string">0</span>, <span class="string">0</span>, <span class="string">0</span>); <span class="comment">// ✅ Midnight</span>
+  filter.sessionDate = { $gte: today };
+  filter.isProcessed = <span class="keyword">false</span>;
+}
+                </div>
+            </div>
+
+            <!-- Issue 3 -->
+            <div class="issue-card">
+                <h3>
+                    <span class="emoji">⏰</span>
+                    Issue #3: Time Format Parsing (0:00 vs 00:00)
+                    <span class="status-badge">FIXED</span>
+                </h3>
+
+                <div class="problem-box">
+                    <h4>❌ Problem</h4>
+                    <p>Time formats like "0:00", "9:5", and "11:34" weren't handled consistently, causing comparison failures.</p>
+                </div>
+
+                <div class="solution-box">
+                    <h4>✅ Solution</h4>
+                    <p>Added time normalization function to convert all time formats to HH:MM (e.g., "0:00" → "00:00").</p>
+                </div>
+
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Input Format</th>
+                            <th>Before (Broken)</th>
+                            <th>After (Fixed)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>0:00</strong></td>
+                            <td class="before">❌ Comparison fails</td>
+                            <td class="after">✅ "00:00"</td>
+                        </tr>
+                        <tr>
+                            <td><strong>9:5</strong></td>
+                            <td class="before">❌ Invalid parsing</td>
+                            <td class="after">✅ "09:05"</td>
+                        </tr>
+                        <tr>
+                            <td><strong>11:34</strong></td>
+                            <td class="before">✅ Works</td>
+                            <td class="after">✅ "11:34"</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="code-block">
+<span class="keyword">const</span> <span class="function">normalizeTime</span> = (timeStr) => {
+  <span class="keyword">if</span> (!timeStr) <span class="keyword">return</span> <span class="string">'00:00'</span>;
+  <span class="keyword">const</span> parts = timeStr.<span class="function">split</span>(<span class="string">':'</span>);
+  <span class="keyword">const</span> hours = String(parts[<span class="string">0</span>] || <span class="string">'0'</span>).<span class="function">padStart</span>(<span class="string">2</span>, <span class="string">'0'</span>);
+  <span class="keyword">const</span> minutes = String(parts[<span class="string">1</span>] || <span class="string">'0'</span>).<span class="function">padStart</span>(<span class="string">2</span>, <span class="string">'0'</span>);
+  <span class="keyword">return</span> <span class="string">`${hours}:${minutes}`</span>;
+};
+                </div>
+            </div>
+
+            <!-- Test Scenarios -->
+            <h2 style="color: #667eea; margin: 40px 0 20px 0; font-size: 2em; text-align: center;">
+                🧪 Test Scenarios
+            </h2>
+
+            <div class="test-scenario">
+                <h4><span class="emoji">📝</span> Scenario 1: Upload Before Session Time</h4>
+                
+                <div class="test-steps">
+                    <h5>Steps:</h5>
+                    <ol>
+                        <li>Create timetable CSV with session at <strong>11:34 - 12:30</strong></li>
+                        <li>Upload at <strong>10:00</strong> (before start time)</li>
+                        <li>Wait until 11:34</li>
+                    </ol>
+                </div>
+
+                <div class="expected-result">
+                    <h5>✅ Expected Result:</h5>
+                    <ul>
+                        <li>✅ Upload successful</li>
+                        <li>✅ Entry shows in "Upcoming Sessions"</li>
+                        <li>✅ Session auto-starts at exactly 11:34</li>
+                        <li>✅ Console shows: "🚀 AUTO-STARTING LAB SESSION"</li>
+                    </ul>
+                </div>
+
+                <div class="log-output">
+<span class="time">10:00:15</span> <span class="success">✅ Timetable uploaded successfully</span>
+<span class="time">10:00:15</span> <span class="info">📋 Found 1 unprocessed entries for today</span>
+<span class="time">10:00:15</span> <span class="info">⏰ Current: 10:00 | Start: 11:34 | Should start? false</span>
+<span class="time">10:00:15</span> <span class="info">✅ Immediate start check complete: 0 session(s) started</span>
+
+<span class="time">11:34:00</span> <span class="success">⏰ TIMETABLE CHECK AT 11:34</span>
+<span class="time">11:34:00</span> <span class="success">🚀 AUTO-STARTING LAB SESSION FROM TIMETABLE</span>
+<span class="time">11:34:01</span> <span class="success">✅ Lab session started: Data Structures</span>
+                </div>
+            </div>
+
+            <div class="test-scenario">
+                <h4><span class="emoji">⚡</span> Scenario 2: Upload AFTER Session Time (Late Upload)</h4>
+                
+                <div class="test-steps">
+                    <h5>Steps:</h5>
+                    <ol>
+                        <li>Create timetable CSV with session at <strong>11:34 - 12:30</strong></li>
+                        <li>Upload at <strong>11:40</strong> (6 minutes late)</li>
+                        <li>Check if session starts immediately</li>
+                    </ol>
+                </div>
+
+                <div class="expected-result">
+                    <h5>✅ Expected Result:</h5>
+                    <ul>
+                        <li>✅ Upload successful</li>
+                        <li>✅ Entry shows in "Upcoming Sessions"</li>
+                        <li>✅ Session starts <strong>IMMEDIATELY</strong> (no wait)</li>
+                        <li>✅ Console shows: "🚀 IMMEDIATE START TRIGGERED!"</li>
+                        <li>✅ Shows "Time difference: 6 minutes late"</li>
+                    </ul>
+                </div>
+
+                <div class="log-output">
+<span class="time">11:40:15</span> <span class="success">✅ Timetable uploaded successfully</span>
+<span class="time">11:40:15</span> <span class="info">🚀 Checking if any sessions should start immediately...</span>
+<span class="time">11:40:15</span> <span class="info">⏰ Current time: 11:40 (700 minutes from midnight)</span>
+<span class="time">11:40:15</span> <span class="info">📋 Found 1 unprocessed entries for today</span>
+
+<span class="time">11:40:15</span> <span class="info">📅 Checking entry: Data Structures</span>
+<span class="time">11:40:15</span> <span class="info">   Start: 11:34 (694 min) | End: 12:30 (750 min)</span>
+<span class="time">11:40:15</span> <span class="info">   Current: 11:40 (700 min)</span>
+<span class="time">11:40:15</span> <span class="success">   Should start? true</span>
+
+<span class="time">11:40:15</span> <span class="warning">🚀 IMMEDIATE START TRIGGERED!</span>
+<span class="time">11:40:15</span> <span class="warning">   Subject: Data Structures</span>
+<span class="time">11:40:15</span> <span class="warning">   Faculty: Dr. John Smith</span>
+<span class="time">11:40:15</span> <span class="warning">   Scheduled: 11:34 - 12:30</span>
+<span class="time">11:40:15</span> <span class="warning">   Uploaded at: 11:40:15 AM</span>
+<span class="time">11:40:15</span> <span class="warning">   Time difference: 6 minutes late</span>
+
+<span class="time">11:40:16</span> <span class="success">✅ Session auto-started immediately: Data Structures</span>
+<span class="time">11:40:16</span> <span class="success">✅ Immediate start check complete: 1 session(s) started</span>
+                </div>
+            </div>
+
+            <div class="test-scenario">
+                <h4><span class="emoji">❌</span> Scenario 3: Upload AFTER Session Ended</h4>
+                
+                <div class="test-steps">
+                    <h5>Steps:</h5>
+                    <ol>
+                        <li>Create timetable CSV with session at <strong>11:34 - 12:30</strong></li>
+                        <li>Upload at <strong>13:00</strong> (after end time)</li>
+                        <li>Check behavior</li>
+                    </ol>
+                </div>
+
+                <div class="expected-result">
+                    <h5>✅ Expected Result:</h5>
+                    <ul>
+                        <li>✅ Upload successful</li>
+                        <li>❌ Entry does NOT show in "Upcoming Sessions" (correct)</li>
+                        <li>❌ Session does NOT start (correct - already passed)</li>
+                        <li>✅ Console shows: "Should start? false"</li>
+                    </ul>
+                </div>
+
+                <div class="log-output">
+<span class="time">13:00:15</span> <span class="success">✅ Timetable uploaded successfully</span>
+<span class="time">13:00:15</span> <span class="info">🚀 Checking if any sessions should start immediately...</span>
+<span class="time">13:00:15</span> <span class="info">⏰ Current time: 13:00 (780 minutes from midnight)</span>
+<span class="time">13:00:15</span> <span class="info">📋 Found 1 unprocessed entries for today</span>
+
+<span class="time">13:00:15</span> <span class="info">📅 Checking entry: Data Structures</span>
+<span class="time">13:00:15</span> <span class="info">   Start: 11:34 (694 min) | End: 12:30 (750 min)</span>
+<span class="time">13:00:15</span> <span class="info">   Current: 13:00 (780 min)</span>
+<span class="time">13:00:15</span> <span class="info">   Should start? false (already ended)</span>
+
+<span class="time">13:00:15</span> <span class="info">✅ Immediate start check complete: 0 session(s) started</span>
+                </div>
+            </div>
+
+            <div class="test-scenario">
+                <h4><span class="emoji">📅</span> Scenario 4: Multiple Sessions Same Day</h4>
+                
+                <div class="test-steps">
+                    <h5>Steps:</h5>
+                    <ol>
+                        <li>Create timetable CSV with 3 sessions:
+                            <ul>
+                                <li>09:00 - 10:40 (past)</li>
+                                <li>11:34 - 12:30 (in progress)</li>
+                                <li>14:00 - 15:40 (future)</li>
+                            </ul>
+                        </li>
+                        <li>Upload at <strong>11:40</strong></li>
+                        <li>Observe behavior</li>
+                    </ol>
+                </div>
+
+                <div class="expected-result">
+                    <h5>✅ Expected Result:</h5>
+                    <ul>
+                        <li>✅ Upload successful (all 3 entries saved)</li>
+                        <li>✅ Only session #2 (11:34) starts immediately</li>
+                        <li>✅ Session #3 (14:00) shows in upcoming</li>
+                        <li>❌ Session #1 (09:00) doesn't start (already ended)</li>
+                    </ul>
+                </div>
+
+                <div class="log-output">
+<span class="time">11:40:15</span> <span class="success">✅ Timetable uploaded successfully</span>
+<span class="time">11:40:15</span> <span class="info">🚀 Checking if any sessions should start immediately...</span>
+<span class="time">11:40:15</span> <span class="info">📋 Found 3 unprocessed entries for today</span>
+
+<span class="time">11:40:15</span> <span class="info">📅 Checking entry: Web Programming</span>
+<span class="time">11:40:15</span> <span class="info">   Start: 09:00 | Current: 11:40 | Should start? false (ended)</span>
+
+<span class="time">11:40:15</span> <span class="warning">📅 Checking entry: Data Structures</span>
+<span class="time">11:40:15</span> <span class="warning">   Start: 11:34 | Current: 11:40 | Should start? true ✅</span>
+<span class="time">11:40:16</span> <span class="success">✅ Session auto-started: Data Structures</span>
+
+<span class="time">11:40:16</span> <span class="info">📅 Checking entry: Database Management</span>
+<span class="time">11:40:16</span> <span class="info">   Start: 14:00 | Current: 11:40 | Should start? false (future)</span>
+
+<span class="time">11:40:16</span> <span class="success">✅ Immediate start check complete: 1 session(s) started</span>
+                </div>
+            </div>
+
+            <!-- Testing Timeline -->
+            <h2 style="color: #667eea; margin: 40px 0 20px 0; font-size: 2em; text-align: center;">
+                🎬 Testing Timeline
+            </h2>
+
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-marker">1</div>
+                    <div class="timeline-content">
+                        <h5>Create Test Timetable CSV</h5>
+                        <p>Create a file named <code>test-timetable.csv</code> with sessions for today (2026-02-15)</p>
+                        <div class="code-block" style="margin-top: 10px;">
+Session Date,Start Time,End Time,Faculty,Subject,Lab ID,Year,Department,Section,Periods,Duration,Max Students
+2026-02-15,11:34,12:30,Dr. Smith,Data Structures,CC1,2,CS,A,2,56,60
+2026-02-15,14:00,15:40,Prof. Doe,Database,CC1,3,CS,B,2,100,60
+                        </div>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker">2</div>
+                    <div class="timeline-content">
+                        <h5>Start Server</h5>
+                        <p>Open terminal and start the server</p>
+                        <div class="code-block" style="margin-top: 10px;">
+cd d:\New_SDC\lab_monitoring_system\central-admin\server
+node app.js
+                        </div>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker">3</div>
+                    <div class="timeline-content">
+                        <h5>Open Admin Dashboard</h5>
+                        <p>Navigate to: <code>http://localhost:3000/central-admin/dashboard/admin-dashboard.html</code></p>
+                        <p>Login with daily admin password (check server console)</p>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker">4</div>
+                    <div class="timeline-content">
+                        <h5>Test Late Upload (Most Important)</h5>
+                        <p>At <strong>11:40</strong> (or any time after 11:34 but before 12:30):</p>
+                        <ol style="margin-left: 20px; margin-top: 10px;">
+                            <li>Go to "Timetable Management" tab</li>
+                            <li>Upload <code>test-timetable.csv</code></li>
+                            <li>Watch server console for immediate start</li>
+                            <li>Verify session started in "Active Sessions"</li>
+                        </ol>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker">5</div>
+                    <div class="timeline-content">
+                        <h5>Check Upcoming Sessions</h5>
+                        <p>Verify that future sessions (14:00) appear in "Upcoming Sessions" tab</p>
+                        <p>Should show: Database (14:00 - 15:40)</p>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-marker">6</div>
+                    <div class="timeline-content">
+                        <h5>Monitor Server Logs</h5>
+                        <p>Check console for these key messages:</p>
+                        <ul style="margin-left: 20px; margin-top: 10px;">
+                            <li>✅ "IMMEDIATE START TRIGGERED!"</li>
+                            <li>✅ "Session auto-started immediately"</li>
+                            <li>✅ "Time difference: X minutes late"</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Verification Checklist -->
+            <h2 style="color: #667eea; margin: 40px 0 20px 0; font-size: 2em; text-align: center;">
+                ✅ Verification Checklist
+            </h2>
+
+            <div class="checklist">
+                <div class="checklist-item">
+                    <input type="checkbox" id="check1">
+                    <label for="check1"><strong>Sessions auto-start at scheduled time</strong> (via cron job)</label>
+                </div>
+                <div class="checklist-item">
+                    <input type="checkbox" id="check2">
+                    <label for="check2"><strong>Sessions auto-start when uploaded late</strong> (immediate start)</label>
+                </div>
+                <div class="checklist-item">
+                    <input type="checkbox" id="check3">
+                    <label for="check3"><strong>Upcoming sessions display correctly</strong> (after upload)</label>
+                </div>
+                <div class="checklist-item">
+                    <input type="checkbox" id="check4">
+                    <label for="check4"><strong>Time normalization handles all formats</strong> ("0:00", "11:34")</label>
+                </div>
+                <div class="checklist-item">
+                    <input type="checkbox" id="check5">
+                    <label for="check5"><strong>Past sessions don't start</strong> (correct behavior)</label>
+                </div>
+                <div class="checklist-item">
+                    <input type="checkbox" id="check6">
+                    <label for="check6"><strong>Multiple sessions handled correctly</strong> (only relevant ones start)</label>
+                </div>
+                <div class="checklist-item">
+                    <input type="checkbox" id="check7">
+                    <label for="check7"><strong>Detailed logging appears</strong> in server console</label>
+                </div>
+                <div class="checklist-item">
+                    <input type="checkbox" id="check8">
+                    <label for="check8"><strong>No duplicate session starts</strong></label>
+                </div>
+            </div>
+
+            <!-- Alert Box -->
+            <div class="alert-box">
+                <h4>⚠️ Important Notes</h4>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li><strong>Date Format:</strong> Use YYYY-MM-DD format in CSV (e.g., 2026-02-15)</li>
+                    <li><strong>Time Format:</strong> Both "0:00" and "00:00" work (auto-normalized)</li>
+                    <li><strong>Server Restart:</strong> Not required - changes are live</li>
+                    <li><strong>Testing Window:</strong> Test late upload between session start and end times</li>
+                    <li><strong>Console Logging:</strong> Check server terminal for detailed debug output</li>
+                </ul>
+            </div>
+
+            <!-- Action Buttons -->
+            <div style="text-align: center; margin: 40px 0;">
+                <a href="http://localhost:3000/central-admin/dashboard/admin-dashboard.html" class="action-button">
+                    🚀 Open Admin Dashboard
+                </a>
+                <a href="TIMETABLE_FIXES_COMPLETE.md" class="action-button">
+                    📖 Read Full Documentation
+                </a>
+            </div>
+
+            <!-- Summary -->
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px; border-radius: 15px; margin-top: 40px; text-align: center;">
+                <h2 style="font-size: 2.5em; margin-bottom: 20px;">🎉 All Fixes Applied!</h2>
+                <p style="font-size: 1.3em; line-height: 1.8;">
+                    ✅ Auto-start at scheduled time<br>
+                    ✅ Auto-start on late upload<br>
+                    ✅ Upcoming sessions display<br>
+                    ✅ Time format normalization<br>
+                </p>
+                <p style="font-size: 1.5em; margin-top: 20px; font-weight: bold;">
+                    Ready to test! 🚀
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

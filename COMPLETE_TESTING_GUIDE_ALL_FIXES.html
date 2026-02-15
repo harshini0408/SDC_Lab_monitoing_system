@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔧 Testing Guide - All Fixes</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 2rem;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 3rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 1rem;
+            font-size: 2.5rem;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #6c757d;
+            margin-bottom: 3rem;
+            font-size: 1.1rem;
+        }
+        
+        .section {
+            margin-bottom: 2.5rem;
+            border-left: 4px solid #667eea;
+            padding-left: 1.5rem;
+        }
+        
+        h2 {
+            color: #667eea;
+            margin-bottom: 1rem;
+            font-size: 1.8rem;
+        }
+        
+        h3 {
+            color: #764ba2;
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+            font-size: 1.3rem;
+        }
+        
+        .test-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+        
+        .test-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .status-fixed {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-testing {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-issue {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .steps {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .steps ol {
+            margin-left: 1.5rem;
+        }
+        
+        .steps li {
+            margin-bottom: 0.5rem;
+            line-height: 1.6;
+        }
+        
+        .expected {
+            background: #e8f5e8;
+            border-left: 4px solid #28a745;
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 4px;
+        }
+        
+        .code {
+            background: #282c34;
+            color: #61dafb;
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            margin-top: 1rem;
+            overflow-x: auto;
+        }
+        
+        .alert {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 4px;
+        }
+        
+        .summary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .summary h2 {
+            color: white;
+            margin-bottom: 1rem;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+        
+        .stat-box {
+            background: rgba(255,255,255,0.2);
+            padding: 1rem;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Complete Testing Guide</h1>
+        <p class="subtitle">Step-by-step testing for all fixes applied on Feb 15, 2026</p>
+        
+        <div class="summary">
+            <h2>📊 Fix Summary</h2>
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-number">6</div>
+                    <div class="stat-label">✅ Issues Fixed</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number">2</div>
+                    <div class="stat-label">🔍 Under Investigation</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number">3</div>
+                    <div class="stat-label">📁 Files Modified</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TEST 1 -->
+        <div class="section">
+            <h2>Test 1: Admin Login</h2>
+            
+            <div class="test-card">
+                <span class="status status-fixed">✅ FIXED</span>
+                <h3>🔐 Login with "admin123"</h3>
+                
+                <div class="steps">
+                    <strong>Steps:</strong>
+                    <ol>
+                        <li>Open admin login page: <code>http://10.10.46.103:7401/admin-login.html</code></li>
+                        <li>Enter password: <strong>"admin123"</strong> (NOT 4-digit password)</li>
+                        <li>Click "🚀 Access Dashboard"</li>
+                    </ol>
+                </div>
+                
+                <div class="expected">
+                    <strong>✅ Expected Result:</strong><br>
+                    ✅ Login successful<br>
+                    ✅ Redirected to admin dashboard<br>
+                    ✅ No errors in console
+                </div>
+            </div>
+        </div>
+
+        <!-- TEST 2 -->
+        <div class="section">
+            <h2>Test 2: Guest Password Display</h2>
+            
+            <div class="test-card">
+                <span class="status status-fixed">✅ FIXED</span>
+                <h3>🔑 4-Digit Password Display</h3>
+                
+                <div class="steps">
+                    <strong>Steps:</strong>
+                    <ol>
+                        <li>Login to admin dashboard</li>
+                        <li>Scroll to the guest password section (after timetable, in top-right corner)</li>
+                        <li>Check the password display</li>
+                        <li>Click the 🔄 refresh button</li>
+                    </ol>
+                </div>
+                
+                <div class="expected">
+                    <strong>✅ Expected Result:</strong><br>
+                    ✅ 4-digit password is displayed (e.g., "7234")<br>
+                    ✅ Light green background color (#a8e6cf to #dcedc1)<br>
+                    ✅ Shows current date (e.g., "Valid for 15 Feb 2026")<br>
+                    ✅ No "ERROR" message<br>
+                    ✅ Refresh button updates the password
+                </div>
+                
+                <div class="alert">
+                    <strong>⚠️ Note:</strong> The password changes daily at midnight. The same 4-digit password will be shown all day until midnight.
+                </div>
+            </div>
+        </div>
+
+        <!-- TEST 3 -->
+        <div class="section">
+            <h2>Test 3: Guest Login from Student Kiosk</h2>
+            
+            <div class="test-card">
+                <span class="status status-fixed">✅ FIXED</span>
+                <h3>🎓 Student Guest Mode Login</h3>
+                
+                <div class="steps">
+                    <strong>Steps:</strong>
+                    <ol>
+                        <li>Open student kiosk application on a lab system</li>
+                        <li>Click "Guest Mode" button (purple gradient)</li>
+                        <li>Enter the 4-digit password from admin dashboard</li>
+                        <li>Click "Login as Guest"</li>
+                    </ol>
+                </div>
+                
+                <div class="expected">
+                    <strong>✅ Expected Result:</strong><br>
+                    ✅ Guest login successful<br>
+                    ✅ System unlocked (can use desktop)<br>
+                    ✅ Student name shows as "Guest User"<br>
+                    ✅ Student ID shows as "GUEST"<br>
+                    ✅ Screen mirroring starts automatically
+                </div>
+                
+                <div class="code">
+# Check server logs for:
+✅ Guest authentication successful: 7234
+✅ Guest session created: [sessionId]
+✅ System unlocked for Guest User
+                </div>
+            </div>
+        </div>
+
+        <!-- TEST 4 -->
+        <div class="section">
+            <h2>Test 4: Active Systems Count</h2>
+            
+            <div class="test-card">
+                <span class="status status-fixed">✅ FIXED</span>
+                <h3>📊 Correct Student Count Display</h3>
+                
+                <div class="steps">
+                    <strong>Steps:</strong>
+                    <ol>
+                        <li>Open admin dashboard with NO students logged in</li>
+                        <li>Check the statistics panel</li>
+                        <li>Login 1 student</li>
+                        <li>Check the statistics again</li>
+                        <li>Login 2nd student</li>
+                        <li>Check the statistics again</li>
+                    </ol>
+                </div>
+                
+                <div class="expected">
+                    <strong>✅ Expected Result:</strong><br>
+                    ✅ With 0 students: Shows "0" (NOT "1")<br>
+                    ✅ With 1 student: Shows "1"<br>
+                    ✅ With 2 students: Shows "2"<br>
+                    ✅ Count updates automatically when students login/logout
+                </div>
+                
+                <div class="code">
+# Check browser console for:
+📊 Stats updated: 0 unique students, 0 monitoring
+📊 Stats updated: 1 unique students, 1 monitoring
+📊 Stats updated: 2 unique students, 2 monitoring
+                </div>
+            </div>
+        </div>
+
+        <!-- TEST 5 -->
+        <div class="section">
+            <h2>Test 5: Timetable Auto-Start</h2>
+            
+            <div class="test-card">
+                <span class="status status-testing">🔍 NEEDS TESTING</span>
+                <h3>⏰ Automatic Session Start</h3>
+                
+                <div class="steps">
+                    <strong>Steps:</strong>
+                    <ol>
+                        <li>Open admin dashboard</li>
+                        <li>Go to "📅 Timetable Management" section</li>
+                        <li>Upload a timetable CSV with an entry starting in 2 minutes</li>
+                        <li>Wait for the scheduled start time</li>
+                        <li>Watch server console logs</li>
+                    </ol>
+                </div>
+                
+                <div class="expected">
+                    <strong>✅ Expected Result:</strong><br>
+                    ✅ Session starts automatically at scheduled time<br>
+                    ✅ Notification appears in admin dashboard<br>
+                    ✅ "🚀 Start Lab Session" button becomes disabled<br>
+                    ✅ "🛑 End Lab Session" button becomes enabled<br>
+                    ✅ Session info panel shows session details
+                </div>
+                
+                <div class="code">
+# Watch server logs for:
+⏰ TIMETABLE CHECK AT 19:35 (2026-02-15)
+📋 Found 1 timetable entries for today
+🔍 Checking: Computer Networks Lab
+   Start: 1175min (19:35)
+   Current: 1175min (19:35)
+   End: 1225min (20:25)
+   Should Start: ✅ YES
+📅 ✅✅✅ TRIGGER: Starting session for Computer Networks Lab ✅✅✅
+✅ Session auto-started successfully: Computer Networks Lab
+                </div>
+                
+                <div class="alert">
+                    <strong>🐛 If it doesn't work:</strong><br>
+                    1. Check if timetable entry was saved correctly<br>
+                    2. Verify `isProcessed` is false<br>
+                    3. Ensure start time matches current time<br>
+                    4. Check for errors in server console
+                </div>
+            </div>
+        </div>
+
+        <!-- TEST 6 -->
+        <div class="section">
+            <h2>Test 6: Multi-Student Screen Mirroring</h2>
+            
+            <div class="test-card">
+                <span class="status status-testing">🔍 NEEDS TESTING</span>
+                <h3>🖥️ Multiple Screens Simultaneously</h3>
+                
+                <div class="steps">
+                    <strong>Steps:</strong>
+                    <ol>
+                        <li>Login student 1 on System-01</li>
+                        <li>Login student 2 on System-02</li>
+                        <li>Open admin dashboard</li>
+                        <li>Check if both student cards appear</li>
+                        <li>Verify both video streams are showing</li>
+                    </ol>
+                </div>
+                
+                <div class="expected">
+                    <strong>✅ Expected Result:</strong><br>
+                    ✅ 2 student cards appear in admin dashboard<br>
+                    ✅ Both student video streams are visible<br>
+                    ✅ Both screens update in real-time<br>
+                    ✅ No black screens or errors<br>
+                    ✅ Statistics show "2" active students
+                </div>
+                
+                <div class="code">
+# Check browser console:
+Monitoring connections: 2
+Connected students: 2
+🔗 Created peer connection for session: [sessionId1]
+🔗 Created peer connection for session: [sessionId2]
+✅ ✅ WebRTC CONNECTED for session: [sessionId1]
+✅ ✅ WebRTC CONNECTED for session: [sessionId2]
+                </div>
+                
+                <div class="alert">
+                    <strong>🐛 If only 1 screen works:</strong><br>
+                    1. Check if both peer connections are created<br>
+                    2. Verify sessionIds are unique<br>
+                    3. Check for ICE candidate conflicts<br>
+                    4. Look for socket event handler issues
+                </div>
+            </div>
+        </div>
+
+        <!-- QUICK CHECKLIST -->
+        <div class="section">
+            <h2>✅ Quick Test Checklist</h2>
+            
+            <div class="test-card">
+                <h3>Complete Test Sequence</h3>
+                
+                <div class="steps">
+                    <strong>Execute in order:</strong>
+                    <ol>
+                        <li>☐ Admin login with "admin123"</li>
+                        <li>☐ Guest password displays correctly (light green, 4 digits)</li>
+                        <li>☐ Active systems count shows 0 when empty</li>
+                        <li>☐ Student guest login works with 4-digit password</li>
+                        <li>☐ Active systems count updates to 1</li>
+                        <li>☐ Login 2nd student</li>
+                        <li>☐ Active systems count shows 2</li>
+                        <li>☐ Both screens mirror simultaneously</li>
+                        <li>☐ Upload timetable with future entry</li>
+                        <li>☐ Session auto-starts at scheduled time</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <!-- TROUBLESHOOTING -->
+        <div class="section">
+            <h2>🐛 Troubleshooting</h2>
+            
+            <div class="test-card">
+                <h3>Common Issues & Solutions</h3>
+                
+                <div class="steps">
+                    <strong>If guest password shows "ERROR":</strong>
+                    <ol>
+                        <li>Check if server is running</li>
+                        <li>Verify `/api/guest-password` endpoint exists</li>
+                        <li>Check browser console for network errors</li>
+                        <li>Restart the server</li>
+                    </ol>
+                    
+                    <strong>If active count is wrong:</strong>
+                    <ol>
+                        <li>Refresh admin dashboard (F5)</li>
+                        <li>Check browser console for `connectedStudents` map</li>
+                        <li>Verify students are actually logged in</li>
+                        <li>Clear browser cache</li>
+                    </ol>
+                    
+                    <strong>If screen mirroring doesn't work:</strong>
+                    <ol>
+                        <li>Check if both systems are on same network</li>
+                        <li>Verify kiosk is sending video stream</li>
+                        <li>Check WebRTC connection state in console</li>
+                        <li>Try refreshing admin dashboard</li>
+                    </ol>
+                    
+                    <strong>If timetable doesn't auto-start:</strong>
+                    <ol>
+                        <li>Check server console for timetable check logs</li>
+                        <li>Verify timetable entry date/time is correct</li>
+                        <li>Ensure `isProcessed` is false in database</li>
+                        <li>Check if another session is already active</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <!-- FINAL NOTES -->
+        <div class="section">
+            <h2>📝 Final Notes</h2>
+            
+            <div class="test-card">
+                <div class="expected">
+                    <strong>✅ What's Working:</strong><br>
+                    • Admin login with static password<br>
+                    • Guest password API and display<br>
+                    • Guest authentication for students<br>
+                    • Correct active systems count<br>
+                    • Admin session persistence<br>
+                    • Light green password display color
+                </div>
+                
+                <div class="alert" style="margin-top: 1rem;">
+                    <strong>⏳ What Needs More Testing:</strong><br>
+                    • Timetable auto-start functionality<br>
+                    • Multi-student screen mirroring<br>
+                    • Active count with 2+ students
+                </div>
+                
+                <div class="code" style="margin-top: 1rem;">
+# Files Modified:
+1. central-admin/dashboard/admin-login.html
+2. central-admin/dashboard/admin-dashboard.html
+3. central-admin/server/app.js
+
+# Total Changes: 6 fixes applied, 2 under investigation
+# Last Updated: February 15, 2026 19:15 IST
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
